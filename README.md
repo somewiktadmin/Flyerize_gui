@@ -36,12 +36,12 @@ If Flyerize_gui is already open and you start it again with more files, for exam
 Send To is the fastest way to use it: select photos (or a whole folder) in Explorer, right-click, and send them straight to Flyerize_gui.
 
 1. Press Win+R, type `shell:sendto`, and press Enter.  A folder opens.
-2. In Explorer, right-click `Flyerize_gui_py.bat` (or the packaged .exe) and choose Create shortcut.
+2. In Explorer, right-click `Flyerize_gui.bat` (or the packaged .exe) and choose Create shortcut.
 3. Move that shortcut into the folder from step 1, and rename it Flyerize_gui.
 
 From then on, right-click any photo or folder, choose Send to, then Flyerize_gui.
 
-`Flyerize_gui_py.bat` starts the script with `pythonw`, so no black console window stays open.  It finds the script through its own folder, so it works wherever you put the Flyerize_gui folder.  Make a shortcut to the batch file, as in the steps above, and do not copy the batch file itself into the Send To folder, because a copy would look for the script in the wrong place.  One catch: `pythonw` hides error messages, so if Flyerize_gui ever fails to start without a word, open a command prompt in its folder and run `python Flyerize_gui.py` to see what went wrong.
+`Flyerize_gui.bat` starts the script with `pythonw`, so no black console window stays open.  It finds the script through its own folder, so it works wherever you put the Flyerize_gui folder.  Make a shortcut to the batch file, as in the steps above, and do not copy the batch file itself into the Send To folder, because a copy would look for the script in the wrong place.  One catch: `pythonw` hides error messages, so if Flyerize_gui ever fails to start without a word, open a command prompt in its folder and run `python Flyerize_gui.py` to see what went wrong.
 
 ## Quick start
 
@@ -57,7 +57,7 @@ From then on, right-click any photo or folder, choose Send to, then Flyerize_gui
 
 The box labeled New name always shows the name the next save will use.  You can edit it before pressing any of these:
 
-- **Save New** (Alt+S) writes the result as a new file and leaves the original alone.  If the name is taken, a number is added (name~1, name~2, and so on).
+- **Save New** (Alt+S) writes the result as a new file and leaves the original alone.  If the name is taken, a number is added (`name~1`, `name~2`, and so on).
 - **Replace** (Alt+A) writes the result under the name in the box.  Whatever file already has that name is backed up first, or the original is backed up if the name is free.
 - **Overwrite!** (Alt+D) does the same with no backup, and asks first.  It cannot be undone, and it saves space only when the crop is small (see the next section).
 - **Rename** (Alt+R) renames the photo's file to the name in the box without rewriting the picture.  The file keeps its own extension.
@@ -119,11 +119,11 @@ When in doubt, use Save New, which keeps both files, or Replace, which keeps the
 - **Crop to lines** cuts the result at your four sides.  Off keeps the whole photo, straightened.
 - **Rotate CCW** turns the result in 90 degree steps.  **Mirror** flips it left to right.  These two and BW/WB change only the preview and the saved result, not the main view.
 - **BW/WB** is experimental: it inverts bright and dark.  Very light pixels become dark gray and very dark pixels become light gray.
-- **Outline** writes a second picture of the original with your lines drawn on it, named with ~dbg.  If the grid is on, its lines are drawn too.
+- **Outline** writes a second picture of the original with your lines drawn on it, named with `~dbg`.  If the grid is on, its lines are drawn too.
 
 ### Settings
 
-Settings is where you choose where backups go, how new files are numbered (name~1, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.
+Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.
 
 ## Good to know
 
@@ -141,3 +141,4 @@ Run `Build_Flyerize_gui.bat` from the folder that contains `Flyerize_gui.py`.  I
 Flyerize_gui is free software, released under the GNU General Public License, version 3 or, at your option, any later version (GPL-3.0-or-later).  You may use it, study it, share it and change it.  If you pass it on, changed or not, the same freedoms must come along with it.  The full text is in the LICENSE file that comes with the program.
 
 It comes with no warranty of any kind.  That includes Overwrite!, so keep a copy of any photo you cannot replace.
+ 
