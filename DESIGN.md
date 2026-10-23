@@ -1,6 +1,6 @@
 # Flyerize_gui design notes
 
-These notes explain why Flyerize_gui behaves the way it does, so the odd-looking choices make sense.  For how to use it, see the README.
+These notes explain why Flyerize_gui behaves the way it does, so the less obvious choices make sense.  For how to use it, see the README.
 
 ## Scope
 
@@ -48,7 +48,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the odd-looking
 
 ## Keyboard
 
-- Alt is the main modifier.  A, S and D are Replace (Amend), Save New and Overwrite! (Dangerous).  B, N and M are Back, Skip to Next and Move.  R renames and V toggles the preview.  Ctrl+B and Ctrl+N are alternates, and Ctrl+Shift+Alt with B or N jumps 100.
+- Alt is the main modifier.  A, S and D are Replace (Amend), Save New and Overwrite! (Destructive).  B, N and M are Back, Skip to Next and Move.  R renames and V toggles the preview.  Ctrl+B and Ctrl+N are alternates, and Ctrl+Shift+Alt with B or N jumps 100.
 - Ctrl is the times-100 step for the arrow keys, WASD and plus and minus, so Ctrl letter shortcuts are avoided.  Ctrl+R stays Reset.
 - F2 and Ctrl+Z are deliberately untouched.  F2 means rename in Explorer, and Ctrl+Z is reserved in case a real undo is ever added.
 - Shortcuts that would clash with typing are ignored while a text box has the keyboard.
