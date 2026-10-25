@@ -1,4 +1,4 @@
-# Flyerize_gui
+# Flyerize_gui v0.1.12 2026-10-25
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -29,6 +29,8 @@ Give it a photo, or a folder, or nothing at all:
 
 With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone photos saved as HEIC are not read, so set the camera to Most Compatible or convert them first.
 
+A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
+
 If Flyerize_gui is already open and you start it again with more files, for example from the Send To menu, the new files join the open window's list.
 
 ### Adding Flyerize_gui to the Send To menu
@@ -53,6 +55,8 @@ From then on, right-click any photo or folder, choose Send to, then Flyerize_gui
 6. **Save.**  Press Save New.  The straightened picture is written next to the original, and the original is left alone.
 7. **Move on.**  Press Skip to Next (Alt+N), or turn on Auto and let each save carry you to the next photo.
 
+The first time Flyerize_gui starts, a short Help panel appears.  Press F1 any time to see it again.
+
 ## The save buttons
 
 The box labeled New name always shows the name the next save will use.  You can edit it before pressing any of these:
@@ -63,7 +67,7 @@ The box labeled New name always shows the name the next save will use.  You can 
 - **Rename** (Alt+R) renames the photo's file to the name in the box without rewriting the picture.  The file keeps its own extension.
 - **Delete** (the Delete key) moves the photo aside as a backup and goes to the next one.  Nothing is asked, and nothing is destroyed.  Backups are normally dot-prefixed copies (.trashed_name.jpg) next to the photo, and Settings can send them to a folder or the Recycle Bin instead.
 
-Every file Flyerize_gui writes is a separate file with its own name.  It never overwrites one without telling you.
+Every file Flyerize_gui writes is a separate file with its own name.  It rarely overwrites one without telling you.
 
 ### About Overwrite!
 
@@ -110,6 +114,7 @@ When in doubt, use Save New, which keeps both files, or Replace, which keeps the
 - Ctrl with W A S D or the arrows is the times 100 step, so those letters are not used with Ctrl.
 - G cycles the grid: off, then 1, 2, 4 or 9 lines each way (a crosshair, thirds, fifths, tenths).  Shift+G goes back.
 - Esc closes the preview or settings, cancels a proposal, or deselects a corner.
+- F1 shows the Help panel.
 
 ### The top row
 
@@ -119,11 +124,15 @@ When in doubt, use Save New, which keeps both files, or Replace, which keeps the
 - **Crop to lines** cuts the result at your four sides.  Off keeps the whole photo, straightened.
 - **Rotate CCW** turns the result in 90 degree steps.  **Mirror** flips it left to right.  These two and BW/WB change only the preview and the saved result, not the main view.
 - **BW/WB** is experimental: it inverts bright and dark.  Very light pixels become dark gray and very dark pixels become light gray.
-- **Outline** writes a second picture of the original with your lines drawn on it, named with `~dbg`.  If the grid is on, its lines are drawn too.
+- **DBG** writes a picture of the original with your lines drawn on it, named with `~dbg`, next to the photo.  If the grid is on, its lines are drawn too.  Pressing it again replaces that file.  It does not save a result.
 
 ### Settings
 
-Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.
+Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.  A dropdown there also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box once you have sent one, turns the reminders off.
+
+### Where Flyerize_gui keeps its files
+
+Settings, and a log of what Flyerize_gui has done (`Flyerize_gui.log`), live in `%APPDATA%\Flyerize_gui\`.  The log starts a fresh file at about 1 MB and keeps the previous one as `Flyerize_gui.log.old`.  If your Python came from the Microsoft Store, Windows quietly keeps these in a private copy of that folder, under `%LOCALAPPDATA%\Packages\` in a folder whose name starts with `PythonSoftwareFoundation`, so you will not find them in the usual place.
 
 ## Good to know
 
@@ -141,4 +150,3 @@ Run `Build_Flyerize_gui.bat` from the folder that contains `Flyerize_gui.py`.  I
 Flyerize_gui is free software, released under the GNU General Public License, version 3 or, at your option, any later version (GPL-3.0-or-later).  You may use it, study it, share it and change it.  If you pass it on, changed or not, the same freedoms must come along with it.  The full text is in the LICENSE file that comes with the program.
 
 It comes with no warranty of any kind.  That includes Overwrite!, so keep a copy of any photo you cannot replace.
- 
