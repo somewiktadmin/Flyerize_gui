@@ -9,6 +9,7 @@ if errorlevel 1 goto fail
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('SendTo')+'\Flyerize_gui.lnk'); $s.TargetPath=(Resolve-Path 'dist\Flyerize_gui.exe').Path; $s.Save()"
 echo.
 echo Done. Right-click a photo or folder, then Send to, then Flyerize_gui.
+certutil -hashfile dist\Flyerize_gui.exe SHA256
 rem pause
 exit /b 0
 :fail
