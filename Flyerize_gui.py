@@ -28,18 +28,84 @@ import sys
 import tempfile
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import cv2
 import numpy as np
 from PIL import Image, ImageOps, ImageTk
 
-SUFFIX = "~cr"
+try:
+    import winreg
+except ImportError:      # not Windows
+    winreg = None
+
+SUFFIX = "~"
 SIDES = ("top", "right", "bottom", "left")
 SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}   # corner indices, A then B
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
+VERSION = "v0.1.12"
+DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
+DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
+# The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
+QR_PNG = (
+    "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"
+)
+# The coffee nag shows once for each number below. After the list it repeats every COFFEE_EVERY operations.
+# Testing schedule. An idea for the shipped one: 10, 100, 500, 1000, 2000, 3000 and so on.
+COFFEE_FIXED = (50, 500, 1000)
+COFFEE_EVERY = 1000
+# How to fill the part of a straightened picture that lies outside the original photo (a corner pulled past the edge).
+FILL_CHOICES = (
+    ("reflect", "Mirror the edge: a mirrored strip of the photo fills the empty corner"),
+    ("replicate", "Repeat the edge: the outermost pixels are stretched into the empty corner"),
+    ("black", "Black: leave the empty corner black"),
+)
+FILL_BORDERS = {"reflect": cv2.BORDER_REFLECT_101, "replicate": cv2.BORDER_REPLICATE, "black": cv2.BORDER_CONSTANT}
+LOG_MAX_BYTES = 1024 * 1024      # at this size the log is renamed to Flyerize_gui.log.old and a new one starts
+REG_PATH = r"Software\Flyerize_gui"
+HELP_TEXT = (
+    "Flyerize_gui straightens photos of flyers, banners and sheets of paper.  It makes a first guess at where the four "
+    "edges are, and you adjust from there.  The result is a flat, upright rectangle saved as a new picture next to your photo.",
+    "Drag the red corner dots until they sit on the corners of the flyer, and drag the purple dot on a side if the paper "
+    "curves.  With the whole photo in view you can also drag across empty space to draw a rectangle, a Z or a slash, and "
+    "Flyerize_gui will propose the corners for you.  Press PREVIEW to look at the result, then Save New.",
+    "You can also hand it a whole folder, for example from the Send To menu, and it lines up every image in it.  Skip to "
+    "Next moves ahead, Back steps back, and Move \u00b1nnn jumps a number of photos at once, backward if the number is "
+    "negative.  Turn on Auto and each save carries you straight on to the next photo.",
+    "Questions, bug reports and ideas are welcome at " + DISCUSSIONS_URL + ".  The README on the project page has a quick "
+    "start and a cheat sheet of every key.  Press F1 at any time to see this panel again.",
+)
 IMAGE_TYPES = [("Images", "*.jpg *.jpeg *.png *.bmp *.gif *.tif *.tiff *.webp"), ("All files", "*.*")]
 
 LINE_COLOR = "#ffd400"
@@ -346,12 +412,12 @@ def grid_lines(corners, bends, fractions, n=48):
     return vertical, horizontal
 
 
-def render(img, corners, bends, crop, interp=cv2.INTER_CUBIC):
+def render(img, corners, bends, crop, interp=cv2.INTER_CUBIC, fill="reflect"):
     mx, my = build_maps(img.shape, corners, bends, crop)
-    return cv2.remap(img, mx, my, interp, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+    return cv2.remap(img, mx, my, interp, borderMode=FILL_BORDERS.get(fill, cv2.BORDER_REFLECT_101), borderValue=(0, 0, 0))
 
 
-def render_preview(img, corners, bends, crop, max_px=1400, max_canvas=20e6):
+def render_preview(img, corners, bends, crop, max_px=1400, max_canvas=20e6, fill="reflect"):
     """A smaller, quicker version of render() for looking at the result."""
     H, W = img.shape[:2]
     s = min(1.0, max_px / max(H, W))
@@ -361,7 +427,7 @@ def render_preview(img, corners, bends, crop, max_px=1400, max_canvas=20e6):
         b2 = {k: (t, d * s) for k, (t, d) in bends.items()}
         _, _, _, _, cw, ch, _ = canvas_info(small.shape, c2, crop)
         if cw * ch <= max_canvas or s < 0.02:
-            return render(small, c2, b2, crop, cv2.INTER_LINEAR)
+            return render(small, c2, b2, crop, cv2.INTER_LINEAR, fill)
         s *= 0.6
 
 
@@ -372,6 +438,7 @@ def load_image(path):
     return np.array(pil), pil
 
 
+# Deprecated 2026-10-23: nothing calls this. Names now come from the filename box and new_file_candidates.
 def output_path(path):
     stem, ext = os.path.splitext(path)
     return stem + SUFFIX + (ext if ext.lower() in (".png", ".bmp") else ".jpg")
@@ -409,10 +476,12 @@ def apply_output_options(arr, rot, mirror, bw=False):
     return np.ascontiguousarray(out)
 
 
+# Deprecated 2026-10-23: nothing calls this. The DBG button builds its own name.
 def outline_path(path):
     return os.path.splitext(path)[0] + "~dbg.jpg"
 
 
+# Deprecated 2026-10-23: nothing calls this. Numbering now comes from new_file_candidates.
 def numbered_path(base):
     """The first free name of the form name~cr~2.jpg, name~cr~3.jpg and so on."""
     stem, ext = os.path.splitext(base)
@@ -896,19 +965,24 @@ SETTINGS_DEFAULTS = {
     "confirm_overwrite": True,      # ask before Overwrite!, which has no backup and no undo
     "confirm_actions": True,        # ask before applying a gesture, Reset, Zero or 5%, and before leaving a photo with unsaved changes
     "jpeg_quality": 95,
+    "fill_mode": "reflect",         # reflect, replicate or black: what fills a corner that lies outside the photo
     "no_subsampling": True,         # keeps color sharp around text
     "mag_zoom": 6.0,
     "show_recents": True,
+    "help_shown": False,            # the first-run help has been shown (the registry keeps its own copy)
+    "ops_count": 0,                 # operations done: saves, renames, deletes and DBG pictures (the registry keeps a copy)
+    "coffee_shown": 0,              # the last coffee nag number that was shown (the registry keeps a copy)
+    "coffee_paid": False,           # honor system: ticked after a coffee was sent, no more nags
     "recents": [],
 }
 
 
 def settings_path():
-    override = os.environ.get("FLYERIZE_SETTINGS")
+    override = os.environ.get("FLYERIZE_GUI_SETTINGS")
     if override:
         return override
     base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "Flyerize", "settings.json")
+    return os.path.join(base, "Flyerize_gui", "settings.json")
 
 
 def load_settings():
@@ -934,8 +1008,118 @@ def save_settings(s):
         pass
 
 
+def log_path():
+    return os.path.join(os.path.dirname(settings_path()), "Flyerize_gui.log")
+
+
+def write_log(fields):
+    """Append one tab-separated line to the log. When the log has reached LOG_MAX_BYTES it is first renamed to
+    Flyerize_gui.log.old, replacing any older .old file, and a fresh log starts. A failed write is ignored."""
+    path = log_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            if os.path.getsize(path) >= LOG_MAX_BYTES:
+                os.replace(path, path + ".old")
+        except OSError:
+            pass
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\t".join(fields) + "\n")
+    except OSError:
+        pass
+
+
+def log_event(action, src, dst=None):
+    """One line in the log: a readable time, the action, the file it came from and the file it made (if any).
+    The fields are separated by tabs, because paths contain spaces. A failed write is ignored."""
+    fields = [time.strftime("[%Y-%m-%d %H:%M:%S]"), action, os.path.abspath(src)]
+    if dst:
+        fields.append(dst if dst.startswith("(") else os.path.abspath(dst))
+    write_log(fields)
+
+
+def run_kind():
+    return "exe" if getattr(sys, "frozen", False) else "script"
+
+
+def log_note(action, *fields):
+    """A log line with no file paths of its own: a readable time, the action, then the fields as given."""
+    write_log([time.strftime("[%Y-%m-%d %H:%M:%S]"), action] + list(fields))
+
+
+def log_start():
+    """The first log line of every run: the program, which kind it is (exe or script), where its files really are,
+    and whether Windows looks to be redirecting them (Microsoft Store Python). The registry key is named too,
+    followed by the three numbers the program reads back from it (help, ops, coffee), because regedit cannot show
+    the private copy that a redirected run keeps."""
+    asked = os.path.abspath(settings_path())
+    real = os.path.realpath(asked)
+    redirected = os.path.normcase(real) != os.path.normcase(asked) or "WindowsApps" in sys.executable
+    fields = [time.strftime("[%Y-%m-%d %H:%M:%S]"), "START", VERSION, "exe" if getattr(sys, "frozen", False) else "script",
+              sys.executable, "settings=" + real, "redirected=" + ("yes" if redirected else "no"), "registry=HKCU\\" + REG_PATH,
+              "help=" + reg_text("help"), "ops=" + reg_text("ops"), "coffee=" + reg_text("coffee")]
+    write_log(fields)
+
+
+def as_int(v):
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def reg_get(name):
+    """A number kept in the registry: 0 if it was never written, None if the registry cannot be read at all.
+    None is treated as 'show nothing', because the registry exists to make a doubled message less likely."""
+    if winreg is None:
+        return 0
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_PATH) as k:
+            return int(winreg.QueryValueEx(k, name)[0])
+    except FileNotFoundError:
+        return 0
+    except (OSError, ValueError):
+        return None
+
+
+def reg_text(name):
+    v = reg_get(name)
+    return "unreadable" if v is None else str(v)
+
+
+def reg_set(name, value):
+    """Write a number to the registry and read it back. True only if the registry now holds exactly that number."""
+    if winreg is None:
+        return True
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as k:
+            winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, int(value))
+    except OSError:
+        return False
+    return reg_get(name) == int(value)
+
+
+def settings_file_has(key, value):
+    """Read the settings file again from disk and check that it holds this value."""
+    try:
+        with open(settings_path(), "r", encoding="utf-8") as f:
+            return json.load(f).get(key) == value
+    except (OSError, ValueError):
+        return False
+
+
+def coffee_milestone(count):
+    """The highest coffee nag number at or below this count, or 0 if none has been reached."""
+    if count < COFFEE_FIXED[0]:
+        return 0
+    top = COFFEE_FIXED[-1]
+    if count <= top:
+        return max(m for m in COFFEE_FIXED if m <= count)
+    return top + ((count - top) // COFFEE_EVERY) * COFFEE_EVERY
+
+
 def temp_dir():
-    return os.environ.get("FLYERIZE_TEMP") or tempfile.gettempdir()
+    return os.environ.get("FLYERIZE_GUI_TEMP") or tempfile.gettempdir()
 
 
 def user_name():
@@ -943,11 +1127,11 @@ def user_name():
 
 
 def queue_file():
-    return os.path.join(temp_dir(), "flyerize_queue_%s.txt" % user_name())
+    return os.path.join(temp_dir(), "flyerize_gui_queue_%s.txt" % user_name())
 
 
 def lock_file():
-    return os.path.join(temp_dir(), "flyerize_running_%s.lock" % user_name())
+    return os.path.join(temp_dir(), "flyerize_gui_running_%s.lock" % user_name())
 
 
 def touch_lock():
@@ -966,7 +1150,7 @@ def clear_lock():
 
 
 def running_instance():
-    """True if a Flyerize window is open and has refreshed its lock recently."""
+    """True if a Flyerize_gui window is open and has refreshed its lock recently."""
     try:
         return time.time() - os.path.getmtime(lock_file()) < LOCK_FRESH_SECONDS
     except OSError:
@@ -1080,15 +1264,6 @@ def new_file_candidates(path, naming_mode, when=None, ext_override=None):
         yield os.path.join(d, "%s~%d%s" % (base, n, ext))
 
 
-def outline_for(crop_path, naming_mode):
-    """The outline picture that goes with a crop. In standard naming it shares the crop's number."""
-    stem = os.path.splitext(crop_path)[0]
-    m = re.match(r"^(.*)~(\d+)$", stem)
-    if naming_mode == "standard" and m:
-        return "%s~dbg~%s.jpg" % (m.group(1), m.group(2))
-    return stem + "~dbg.jpg"
-
-
 def unique_path(path, limit=BACKUP_LIMIT):
     """The path itself if it is free, else name~2, name~3 and so on up to name~limit. None when they are all taken."""
     if not os.path.exists(path):
@@ -1137,7 +1312,7 @@ def make_undo_copy(path, method):
     else:
         dest = unique_path(os.path.join(d, ".trashed_" + name))
     if dest is None:
-        raise OSError("Every numbered backup name is taken (up to ~%d). Remove some of the old backups outside Flyerize "
+        raise OSError("Every numbered backup name is taken (up to ~%d). Remove some of the old backups outside Flyerize_gui "
                       "and try again. Nothing was changed." % BACKUP_LIMIT)
     os.replace(path, dest)
     return dest
@@ -1177,18 +1352,22 @@ class SettingsPanel(tk.Frame):
         s = app.settings
         body = tk.Frame(self)
         body.place(relx=0.5, rely=0.5, anchor="center")
-        tk.Label(body, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(anchor="w", pady=(0, 8))
-        tk.Label(body, text="Here, let me give you enough rope...", font=("TkDefaultFont", 10, "italic")).pack(anchor="w")
-        tk.Label(body, text="Overwrite! replaces the original with no backup and no undo. It saves space only as far as your crop is\n"
-                            "smaller than the photo, and uploaded copies or recently deleted folders keep the old picture.\n"
-                            "Turn the question off if you know what you are doing.", justify="left").pack(anchor="w", pady=(0, 2))
+        head = tk.Frame(body)
+        head.pack(anchor="w", pady=(0, 6))
+        tk.Label(head, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(side="left")
+        tk.Label(head, text="Here, let me give you enough rope...", font=("TkDefaultFont", 10, "italic")).pack(side="left", padx=(14, 0), anchor="s")
+        tk.Label(body, text="Overwrite! replaces the original with no backup and no undo, and saves space only as far as your crop\n"
+                            "is smaller. Uploaded copies and deleted folders keep the old picture. Turn the question off if you're sure.",
+                 justify="left").pack(anchor="w", pady=(0, 2))
         self.confirm_overwrite = tk.BooleanVar(value=s["confirm_overwrite"])
         tk.Checkbutton(body, text="Ask before Overwrite!", variable=self.confirm_overwrite, command=self.commit).pack(anchor="w", pady=(0, 6))
         self.undo = tk.StringVar(value=s["undo_method"])
         self.naming = tk.StringVar(value=s["naming_mode"])
         self.confirm_actions = tk.BooleanVar(value=s["confirm_actions"])
         self.show_recents = tk.BooleanVar(value=s.get("show_recents", True))
+        self.coffee_paid = tk.BooleanVar(value=bool(s.get("coffee_paid", False)))
         self.quality = tk.StringVar(value=str(s["jpeg_quality"]))
+        self.fill_text = tk.StringVar(value=dict(FILL_CHOICES).get(s.get("fill_mode", "reflect"), FILL_CHOICES[0][1]))
         self.sharp = tk.BooleanVar(value=s["no_subsampling"])
         self.zoom = tk.StringVar(value="%d" % round(float(s["mag_zoom"]) * 100))
 
@@ -1206,6 +1385,7 @@ class SettingsPanel(tk.Frame):
         tk.Checkbutton(body, text="Ask before applying a gesture, Reset, Zero or 5%, and before leaving a photo with unsaved changes",
                        variable=self.confirm_actions, command=self.commit).pack(anchor="w")
         tk.Checkbutton(body, text="Show the recent crops list on the right", variable=self.show_recents, command=self.commit).pack(anchor="w")
+        tk.Checkbutton(body, text="I have sent a coffee (turns off the coffee nags)", variable=self.coffee_paid, command=self.commit).pack(anchor="w")
         row = tk.Frame(body)
         row.pack(anchor="w", pady=(6, 0))
         tk.Label(row, text="JPEG quality").pack(side="left")
@@ -1213,6 +1393,10 @@ class SettingsPanel(tk.Frame):
         sb.pack(side="left", padx=6)
         sb.bind("<Return>", lambda e: self.commit())
         sb.bind("<FocusOut>", lambda e: self.commit())
+        tk.Label(row, text="Empty corner fill").pack(side="left", padx=(24, 0))
+        fill_box = ttk.Combobox(row, textvariable=self.fill_text, values=[t for _, t in FILL_CHOICES], state="readonly", width=64)
+        fill_box.pack(side="left", padx=6)
+        fill_box.bind("<<ComboboxSelected>>", lambda e: self.commit())
         tk.Checkbutton(body, text="Keep color sharp around text (no chroma subsampling)", variable=self.sharp, command=self.commit).pack(anchor="w")
         row = tk.Frame(body)
         row.pack(anchor="w", pady=(6, 0))
@@ -1221,7 +1405,7 @@ class SettingsPanel(tk.Frame):
         sb.pack(side="left", padx=6)
         sb.bind("<Return>", lambda e: self.commit())
         sb.bind("<FocusOut>", lambda e: self.commit())
-        tk.Button(body, text="Close", width=12, height=2, command=app.close_panel).pack(pady=(14, 0))
+        tk.Button(body, text="Close", width=12, height=2, command=app.close_panel).pack(pady=(10, 0))
         self.place(in_=app.canvas, x=0, y=0, relwidth=1, relheight=1)
 
     def commit(self):
@@ -1231,6 +1415,8 @@ class SettingsPanel(tk.Frame):
         s["confirm_actions"] = bool(self.confirm_actions.get())
         s["confirm_overwrite"] = bool(self.confirm_overwrite.get())
         s["show_recents"] = bool(self.show_recents.get())
+        s["coffee_paid"] = bool(self.coffee_paid.get())
+        s["fill_mode"] = next((k for k, t in FILL_CHOICES if t == self.fill_text.get()), "reflect")
         try:
             s["jpeg_quality"] = min(100, max(50, int(float(self.quality.get()))))
             s["mag_zoom"] = min(ZOOM_MAX, max(ZOOM_MIN, float(self.zoom.get()) / 100.0))
@@ -1306,7 +1492,6 @@ class App:
         self.crop = tk.BooleanVar(value=True)
         self.mirror = tk.BooleanVar(value=False)
         self.bw = tk.BooleanVar(value=False)
-        self.outline = tk.BooleanVar(value=False)
         self.zoom_var = tk.StringVar(value="100")
         self.auto = tk.BooleanVar(value=bool(self.settings["auto_advance"]))
         self.added = 0                          # results added after this photo by Save New
@@ -1319,6 +1504,8 @@ class App:
         self.ghost, self.trace = None, None
         self.last_written = self.last_outline = None
         self.saved = None
+        self.help_win = self.coffee_win = self.coffee_img = None
+        self.first_run_session = False
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         root.geometry("%dx%d" % (int(sw * 0.8), int(sh * 0.8)))      # a normal window: the OS decides where it opens
         root.minsize(900, 520)
@@ -1344,6 +1531,7 @@ class App:
         bar1.pack(fill="x", padx=8, pady=(6, 0))
         self.preview_btn = tk.Button(bar1, text="PREVIEW", width=9, command=self.on_preview)
         self.preview_btn.pack(side="left", padx=(0, 10))
+        tk.Label(bar1, text=VERSION, fg="#666666").pack(side="right")      # sits right above EXIT
         sb = tk.Spinbox(bar1, from_=2, to=1600, increment=10, width=6, textvariable=self.zoom_var, format="%.0f",
                         command=self.on_zoom_spin)
         sb.pack(side="left", padx=(2, 0))
@@ -1370,7 +1558,7 @@ class App:
         self.rot_btn.pack(side="left", padx=2)
         tk.Checkbutton(bar1, text="Mirror", variable=self.mirror).pack(side="left", padx=2)
         tk.Checkbutton(bar1, text="BW/WB", variable=self.bw).pack(side="left", padx=2)
-        tk.Checkbutton(bar1, text="Outline", variable=self.outline).pack(side="left", padx=2)
+        tk.Button(bar1, text="DBG", command=self.on_dbg).pack(side="left", padx=2)
         hints = {
             "Zoom %": "How far the main view is zoomed, in percent. The mouse wheel zooms too, about the pointer.",
             "Fit": "Zooms the main view to show the whole photo.",
@@ -1380,7 +1568,7 @@ class App:
             "Crop to lines": "On cuts the result at your four sides. Off keeps the whole photo, straightened.",
             "Mirror": "Flips the result left to right. It changes only the preview and the saved result, not the main view.",
             "BW/WB": "Experimental: invert bright and dark. Very light pixels become dark gray and very dark pixels become light gray. It changes only the preview and the saved result, not the main view.",
-            "Outline": "Also saves a copy of the original photo with your lines drawn on it, named with ~dbg, next to the result. The grid lines are included when the grid is on.",
+            "DBG": "Writes a copy of the original with the crop lines (and gridlines) drawn on it.",
         }
         for w in bar1.winfo_children():
             try:
@@ -1427,7 +1615,7 @@ class App:
         exit_btn.pack(side="right")
         Tooltip(self.preview_btn, "Shows the corrected result over the main view. Click again, or press Esc, to go back. Alt+V does the same.")
         Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality and more.")
-        Tooltip(exit_btn, "Closes Flyerize. If there are unsaved changes it asks first, unless that is turned off in Settings.")
+        Tooltip(exit_btn, "Closes Flyerize_gui. If there are unsaved changes it asks first, unless that is turned off in Settings.")
         bar3 = tk.Frame(root)
         bar3.pack(fill="x", padx=8, pady=(0, 6))
         tk.Label(bar3, text="New name:").pack(side="left", anchor="n", pady=2)
@@ -1452,10 +1640,13 @@ class App:
         root.bind("<Alt-Key>", self.on_alt_key)
         root.bind("<Control-Alt-Key>", self.on_ctrl_alt_key)
         root.bind("<Delete>", self.on_delete_key)
+        root.bind("<F1>", lambda e: self.show_help())
         root.protocol("WM_DELETE_WINDOW", self.on_exit)
         touch_lock()
+        log_start()
         self.load(0)
         self.poll_id = root.after(QUEUE_POLL_MS, self.poll_queue)
+        root.after(600, self.first_run_check)
 
     def say(self, text):
         n = max(30, self.status.winfo_width() // 7) if self.status.winfo_width() > 50 else 110
@@ -1465,7 +1656,7 @@ class App:
 
     def set_title(self):
         n = len(self.paths)
-        self.root.title("Flyerize  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
+        self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
         self.prev_btn.config(state="normal" if self.index > 0 else "disabled")
         self.go_btn.config(state="normal" if n > 1 else "disabled")
@@ -1559,6 +1750,8 @@ class App:
             lines = read_queue()
             if lines:
                 added = [p for p in collect_paths(lines) if p not in self.paths]
+                log_note("QUEUE_IN", VERSION, run_kind(), "items=%d" % len(lines), "added=%d" % len(added),
+                         "queue=" + os.path.abspath(queue_file()))
                 if added:
                     self.paths.extend(added)
                     self.set_title()
@@ -2092,7 +2285,7 @@ class App:
             return
         self.busy(True)
         try:
-            out = render_preview(self.img, self.corners, self.bends, self.crop.get(), max_px=2000)
+            out = render_preview(self.img, self.corners, self.bends, self.crop.get(), max_px=2000, fill=self.settings.get("fill_mode", "reflect"))
             out = apply_output_options(out, self.rot, self.mirror.get(), self.bw.get())
         except (MemoryError, ValueError, cv2.error) as ex:
             self.busy(False)
@@ -2186,15 +2379,146 @@ class App:
         win.geometry("+%d+%d" % (r.winfo_rootx() + (r.winfo_width() - win.winfo_width()) // 2,
                                  r.winfo_rooty() + (r.winfo_height() - win.winfo_height()) // 3))
 
+    def effective(self, key, reg_name):
+        """The larger of the settings file's number and the registry's number. None if the registry cannot be read."""
+        r = reg_get(reg_name)
+        if r is None:
+            return None
+        return max(as_int(self.settings.get(key)), r)
+
+    def first_run_check(self):
+        """Show the help once and only once. Both places are written and read back before it is shown, and if either
+        cannot be confirmed it is not shown at all. F1 always works."""
+        shown = self.effective("help_shown", "help")
+        if shown is None or shown:
+            return
+        self.settings["help_shown"] = True
+        save_settings(self.settings)
+        if not (settings_file_has("help_shown", True) and reg_set("help", 1)):
+            return
+        self.first_run_session = True
+        self.show_help()
+
+    def count_operation(self):
+        """Called after every save, rename, delete and DBG picture that worked."""
+        cur = self.effective("ops_count", "ops")
+        n = (cur if cur is not None else as_int(self.settings.get("ops_count"))) + 1
+        self.settings["ops_count"] = n
+        save_settings(self.settings)
+        reg_set("ops", n)
+        self.root.after(300, lambda: self.maybe_coffee(n))
+
+    def maybe_coffee(self, n):
+        s = self.settings
+        if s.get("coffee_paid") or self.first_run_session or self.help_win is not None or self.coffee_win is not None:
+            return
+        m = coffee_milestone(n)
+        shown = self.effective("coffee_shown", "coffee")
+        if shown is None or m <= shown:
+            return
+        s["coffee_shown"] = m
+        save_settings(s)
+        if not (settings_file_has("coffee_shown", m) and reg_set("coffee", m)):
+            return
+        self.show_coffee(n)
+
+    def show_coffee(self, n):
+        """The coffee nag. Modal. Its checkbox is the honor system and stops the nags for good."""
+        if self.coffee_win is not None:
+            return
+        win = tk.Toplevel(self.root)
+        win.title("Buy me a coffee?")
+        win.transient(self.root)
+        self.coffee_win = win
+        tk.Label(win, text="Buy me a coffee?", font=("TkDefaultFont", 13, "bold")).pack(padx=26, pady=(16, 4))
+        tk.Label(win, text="Flyerize_gui has now done %d jobs for you.  If it has saved you time, a $5 coffee would be "
+                           "very welcome." % n, wraplength=380, justify="left").pack(padx=26, pady=(0, 8))
+        try:
+            self.coffee_img = tk.PhotoImage(data=QR_PNG)
+        except tk.TclError:
+            self.coffee_img = None
+        if self.coffee_img is not None:
+            tk.Label(win, text="Scan with your phone:").pack()
+            tk.Label(win, image=self.coffee_img, bd=0).pack(pady=4)
+        link = tk.Label(win, text="Click here to open PayPal in your browser", fg="#0645ad", cursor="hand2",
+                        font=("TkDefaultFont", 10, "underline"))
+        link.pack(pady=(0, 8))
+        link.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
+        paid = tk.BooleanVar(value=False)
+        tk.Checkbutton(win, text="I sent one, so stop asking.", variable=paid).pack(pady=(0, 6))
+
+        def close(e=None):
+            if paid.get():
+                self.settings["coffee_paid"] = True
+                save_settings(self.settings)
+            self.coffee_win = None
+            win.destroy()
+
+        btn = tk.Button(win, text="Close", width=13, command=close)
+        btn.pack(pady=(0, 16))
+        btn.focus_set()
+        win.bind("<Escape>", close)
+        win.bind("<Return>", close)
+        win.protocol("WM_DELETE_WINDOW", close)
+        self.center_over_root(win)
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+        self.root.wait_window(win)
+
+    def show_help(self):
+        """The Help panel (F1). Modal, so it waits until closed. Escape, Return or Close all close it."""
+        if self.help_win is not None:
+            return
+        win = tk.Toplevel(self.root)
+        win.title("Flyerize_gui Help")
+        win.transient(self.root)
+        self.help_win = win
+        txt = tk.Text(win, width=72, height=18, wrap="word", relief="flat", padx=22, pady=16, cursor="arrow",
+                      bg=win.cget("bg"), spacing3=10)
+        txt.pack(fill="both", expand=True)
+        txt.tag_configure("link", foreground="#0645ad", underline=True)
+        txt.tag_bind("link", "<Button-1>", lambda e: webbrowser.open(DISCUSSIONS_URL))
+        txt.tag_bind("link", "<Enter>", lambda e: txt.config(cursor="hand2"))
+        txt.tag_bind("link", "<Leave>", lambda e: txt.config(cursor="arrow"))
+        for i, para in enumerate(HELP_TEXT):
+            pos = para.find(DISCUSSIONS_URL)
+            if pos < 0:
+                txt.insert("end", para)
+            else:
+                txt.insert("end", para[:pos])
+                txt.insert("end", DISCUSSIONS_URL, "link")
+                txt.insert("end", para[pos + len(DISCUSSIONS_URL):])
+            if i < len(HELP_TEXT) - 1:
+                txt.insert("end", "\n")
+        txt.config(state="disabled")
+
+        def close(e=None):
+            self.help_win = None
+            win.destroy()
+
+        btn = tk.Button(win, text="Close", width=13, command=close)
+        btn.pack(pady=(0, 16))
+        btn.focus_set()
+        win.bind("<Escape>", close)
+        win.bind("<Return>", close)
+        win.protocol("WM_DELETE_WINDOW", close)
+        self.center_over_root(win)
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+        self.root.wait_window(win)
+
     def plan_save(self, mode):
-        """Work out which files to write. mode is new, replace_undo or replace_perm. Returns a dict with crop, outline,
+        """Work out which files to write. mode is new, replace_undo or replace_perm. Returns a dict with crop,
         backup (a file to move aside first) and remove (a file to delete first), or None if cancelled.
         The box names the file that gets the result. Save New adds a number when that name is taken. Replace and
         Overwrite! write exactly that name: a file already there is backed up (Replace) or overwritten (Overwrite!),
         and when the name is free, the original is backed up (Replace) or removed (Overwrite!) instead."""
         s = self.settings
         naming = s["naming_mode"]
-        want_outline = self.outline.get()
         typed = self.typed_name()
         if typed is None:
             return None
@@ -2224,24 +2548,22 @@ class App:
                     if dont:
                         s["confirm_overwrite"] = False
                         save_settings(s)
-            outline = os.path.splitext(target)[0] + "~dbg.jpg" if want_outline else None
-            return {"crop": target, "outline": outline, "backup": backup, "remove": remove}
+            return {"crop": target, "backup": backup, "remove": remove}
         stem_here = os.path.splitext(typed)[0]
         number_mode = "hds7" if (naming == "hds7" and HDS7_NAME.match(stem_here)) else "standard"
         cands = list(new_file_candidates(target, number_mode, self.photo_when))
 
         def taken(c):
-            return os.path.exists(c) or (want_outline and os.path.exists(outline_for(c, naming)))
+            return os.path.exists(c)
 
         if taken(target):
             free = next((c for c in cands if not taken(c)), None)
             if free is None:
                 messagebox.showerror("No free name", "Every numbered name is taken. Rename or move some of the saved files "
-                                     "outside Flyerize, or copy the original and start again.")
+                                     "outside Flyerize_gui, or copy the original and start again.")
                 return None
             target = free
-        outline = outline_for(target, naming) if want_outline else None
-        return {"crop": target, "outline": outline, "backup": None, "remove": None}
+        return {"crop": target, "backup": None, "remove": None}
 
     def on_generate(self, mode="new"):
         """Save. Returns True if saved, False if cancelled or it failed."""
@@ -2257,22 +2579,21 @@ class App:
         except OSError:
             pass
         crop = plan["crop"]
-        tmp = os.path.join(os.path.dirname(crop), ".flyerize_tmp_" + os.path.basename(crop))
+        tmp = os.path.join(os.path.dirname(crop), ".flyerize_gui_tmp_" + os.path.basename(crop))
         self.busy(True)
         try:
-            out = apply_output_options(render(self.img, self.corners, self.bends, self.crop.get()), self.rot,
+            out = apply_output_options(render(self.img, self.corners, self.bends, self.crop.get(), fill=self.settings.get("fill_mode", "reflect")), self.rot,
                                        self.mirror.get(), self.bw.get())
-            outline_arr = outline_image(self.img, self.corners, self.bends, self.trace_for_outline(), GRID_MODES[self.grid_mode][1]) if plan["outline"] else None
             write_image(out, self.pil, tmp, s["jpeg_quality"], s["no_subsampling"], times)   # written first, so a failure loses nothing
             note = ""
             if plan["backup"] is not None:
                 where = make_undo_copy(plan["backup"], s["undo_method"])
+                log_event("BACKUP", plan["backup"], "(Recycle Bin)" if where == "the Recycle Bin" else where)
                 note = "\nBacked up: %s" % (where if where == "the Recycle Bin" else os.path.relpath(where, os.path.dirname(crop)))
             elif plan["remove"] is not None:
                 os.remove(plan["remove"])
+                log_event("REMOVE", plan["remove"])
             os.replace(tmp, crop)
-            if plan["outline"]:
-                write_image(outline_arr, self.pil, plan["outline"], s["jpeg_quality"], s["no_subsampling"], times)
         except MemoryError:
             self.cleanup(tmp)
             self.busy(False)
@@ -2285,14 +2606,46 @@ class App:
             return False
         self.busy(False)
         self.last_written = crop
-        if plan["outline"]:
-            self.last_outline = plan["outline"]
         self.saved = self.snapshot()
         self.add_recent()
         self.say("Saved to: %s\n%s  (%d x %d)%s" % (os.path.dirname(os.path.abspath(crop)), os.path.basename(crop), out.shape[1], out.shape[0], note))
         self.set_name(os.path.basename(crop))
         self.note_result(mode, crop)
+        log_event({"new": "SAVE_NEW", "replace_undo": "REPLACE", "replace_perm": "OVERWRITE"}.get(mode, mode.upper()), self.path, crop)
+        self.count_operation()
         return True
+
+    def on_dbg(self):
+        """Write the outline picture (the original photo with the lines drawn on it) as name~dbg.jpg beside the photo.
+        There is only ever one per photo: pressing again simply overwrites it, with no backup. It is not a save: no
+        result is written, and the unsaved-changes state is left alone."""
+        s = self.settings
+        target = os.path.splitext(self.path)[0] + "~dbg.jpg"
+        times = None
+        try:
+            st = os.stat(self.path)
+            times = (st.st_atime, st.st_mtime)
+        except OSError:
+            pass
+        self.busy(True)
+        try:
+            arr = outline_image(self.img, self.corners, self.bends, self.trace_for_outline(), GRID_MODES[self.grid_mode][1])
+            write_image(arr, self.pil, target, s["jpeg_quality"], s["no_subsampling"], times)
+        except MemoryError:
+            self.cleanup(target)
+            self.busy(False)
+            messagebox.showerror("Too large", "The picture is too large to build in memory.")
+            return
+        except Exception as ex:
+            self.cleanup(target)
+            self.busy(False)
+            messagebox.showerror("Could not save", str(ex))
+            return
+        self.busy(False)
+        self.last_outline = target
+        self.say("Saved to: %s\n%s  (%d x %d)" % (os.path.dirname(os.path.abspath(target)), os.path.basename(target), arr.shape[1], arr.shape[0]))
+        log_event("DBG", self.path, target)
+        self.count_operation()
 
     def note_result(self, mode, crop):
         """Keep the file list in step with what was written. Save New adds the new file right after this photo (and after
@@ -2330,14 +2683,12 @@ class App:
         self.canvas.focus_set()
 
     def update_auto_look(self):
-        """While Auto is on, the buttons it affects wear an arrow and a pale green fill, and the ones that move you
-        around turn gray. They all still work."""
+        """While Auto is on, the save buttons it affects wear an arrow and a pale green fill. The buttons that move
+        you around keep their normal look, because they stay fully valid."""
         on = bool(self.auto.get()) and len(self.paths) > 1
         for btn, label in ((self.save_btn, "Save New"), (self.replace_btn, "Replace"),
                            (self.overwrite_btn, "Overwrite!"), (self.rename_btn, "Rename")):
             btn.config(text=label + " \u2192" if on else label, bg=AUTO_FILL if on else self.btn_bg, fg="black" if on else self.btn_fg)
-        for btn in (self.prev_btn, self.go_btn, self.next_btn):
-            btn.config(fg="#8a8a8a" if on else self.btn_fg)
 
     def on_rename(self):
         """Rename this photo's file to the name in the box without rewriting the picture. The file keeps its own
@@ -2360,13 +2711,14 @@ class App:
             number_mode = "hds7" if (naming == "hds7" and HDS7_NAME.match(stem)) else "standard"
             target = next((c for c in new_file_candidates(target, number_mode, self.photo_when, ext) if not os.path.exists(c)), None)
             if target is None:
-                messagebox.showerror("No free name", "Every numbered name is taken. Rename or move some of the files outside Flyerize.")
+                messagebox.showerror("No free name", "Every numbered name is taken. Rename or move some of the files outside Flyerize_gui.")
                 return
         try:
             os.rename(old, target)
         except OSError as ex:
             messagebox.showerror("Could not rename", str(ex))
             return
+        log_event("RENAME", old, target)
         key_old = os.path.normcase(os.path.abspath(old))
         if key_old in self.result_entries:
             self.result_entries.discard(key_old)
@@ -2376,6 +2728,7 @@ class App:
         self.set_name(os.path.basename(target))
         self.set_title()
         self.say("Renamed to: %s\nThe picture itself was not rewritten." % os.path.basename(target))
+        self.count_operation()
         if self.auto.get() and self.next_index() is not None:
             self.on_skip()
 
@@ -2391,10 +2744,13 @@ class App:
         except OSError as ex:
             messagebox.showerror("Could not delete", str(ex))
             return
+        if where is not None:
+            log_event("DELETE", target, "(Recycle Bin)" if where == "the Recycle Bin" else where)
+            self.count_operation()
         del self.paths[self.index]
         self.result_entries.discard(os.path.normcase(os.path.abspath(target)))
         if not self.paths:
-            messagebox.showinfo("Flyerize", "%s was the last photo in the list. Flyerize will close." % name)
+            messagebox.showinfo("Flyerize_gui", "%s was the last photo in the list. Flyerize_gui will close." % name)
             self.saved = self.snapshot()      # nothing to ask about on the way out
             self.on_exit()
             return
@@ -2451,6 +2807,7 @@ def main():
     args = sys.argv[1:]
     if args and running_instance():
         forward_to_running([os.path.abspath(a) for a in args])      # a window is open: add these to its queue and leave
+        log_note("HANDOFF", VERSION, run_kind(), "items=%d" % len(args), "queue=" + os.path.abspath(queue_file()))
         return
     root = tk.Tk()
     if not args:
