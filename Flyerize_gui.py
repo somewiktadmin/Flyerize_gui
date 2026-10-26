@@ -46,7 +46,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.12"
+VERSION = "v0.1.13"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -82,7 +82,7 @@ QR_PNG = (
     "AFABQAUAFQBUAFABQAUAFQBUAFAB4I3+AMDouJ+yaIfjAAAAAElFTkSuQmCC"
 )
 # The coffee nag shows once for each number below. After the list it repeats every COFFEE_EVERY operations.
-# Testing schedule. An idea for the shipped one: 10, 100, 500, 1000, 2000, 3000 and so on.
+# Shipped schedule: 50, 500, 1000, then every 1000. The testing schedule was 5, 10, 15, 20, 25, 50, 75, 100, then every 25.
 COFFEE_FIXED = (50, 500, 1000)
 COFFEE_EVERY = 1000
 # How to fill the part of a straightened picture that lies outside the original photo (a corner pulled past the edge).
@@ -1602,7 +1602,7 @@ class App:
         self.btn_bg, self.btn_fg = self.save_btn.cget("bg"), self.save_btn.cget("fg")
         Tooltip(self.save_btn, "Saves the result as a new file and leaves the original alone. If the name is taken, a number is added. Alt+S does the same.")
         Tooltip(self.replace_btn, "Saves the result under the name in the box and backs up whatever file has that name, or the original if the name is free. Settings says where the backup goes. Alt+A does the same.")
-        Tooltip(self.overwrite_btn, "Saves the result under the name in the box, overwriting any file with that name, or removing the original if the name is free. There is no backup and this cannot be undone. Alt+D does the same.")
+        Tooltip(self.overwrite_btn, "Replaces this photo with the result. There is no backup and this cannot be undone. It is gray while the name box has been edited. Alt+D does the same.")
         Tooltip(self.delete_btn, "Moves this photo aside as a backup and goes to the next one. Nothing is asked, and Settings says where the backup goes. The Delete key does the same.")
         Tooltip(self.rename_btn, "Renames this file to the name in the box without rewriting the picture. The file keeps its own extension, and a taken name gets a number. Alt+R does the same.")
         Tooltip(self.auto_chk, "In full directory mode, automatically advances to the next image after each file is saved.")
@@ -1620,6 +1620,7 @@ class App:
         bar3.pack(fill="x", padx=8, pady=(0, 6))
         tk.Label(bar3, text="New name:").pack(side="left", anchor="n", pady=2)
         self.new_name = tk.StringVar()
+        self.new_name.trace_add("write", lambda *a: self.update_overwrite_state())
         self.name_baseline = ""                 # what the program last put in the box. Anything else is typing.
         self.name_entry = tk.Entry(bar3, textvariable=self.new_name, width=46)
         self.name_entry.pack(side="left", anchor="n", padx=(4, 12))
@@ -2305,6 +2306,14 @@ class App:
         """Put a name in the box. Whatever the program puts there is the baseline, and only a difference from it counts as typing."""
         self.new_name.set(text)
         self.name_baseline = text
+        self.update_overwrite_state()
+
+    def update_overwrite_state(self):
+        """Overwrite! is available only while the box still holds the name the program put there. Typing a different
+        name turns it off, and typing that name back turns it on again."""
+        btn = getattr(self, "overwrite_btn", None)
+        if btn is not None:
+            btn.config(state="normal" if self.new_name.get() == self.name_baseline else "disabled")
 
     def refresh_name(self):
         """The box starts at the original's name, with any ~nn numbers folded together (see folded_name). All three save
@@ -2673,6 +2682,9 @@ class App:
 
     def do_save(self, mode):
         """A save button was pressed. With Auto on, a successful save moves on to the next photo."""
+        if mode == "replace_perm" and self.new_name.get() != self.name_baseline:
+            self.say("Overwrite! is off while the name box has been edited.  Retype the original name, or use Save New or Replace.")
+            return
         if self.on_generate(mode) and self.auto.get() and self.next_index() is not None:
             self.next_file()
 

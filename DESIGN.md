@@ -31,7 +31,8 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 - **Save New** writes a new file and leaves the original alone.  **Replace** backs up first.  **Overwrite!** does not.  **Rename** renames the file without rewriting the picture and keeps its extension.  **Delete** moves the photo aside as a backup, with no question asked, because nothing is destroyed.
 - The name box starts at the original's name and always shows the name just written.  The program never rewrites it after a save, so repeated saves can produce names like `name~1~1`.  That is accepted, since every save is a separate file and nothing is lost.
-- Replace and Overwrite! act on the file the box names.  If it exists, it is backed up (Replace) or overwritten (Overwrite!).  If the name is free, the original is backed up or removed and the result lands under the new name.
+- Replace acts on the file the box names.  If it exists, it is backed up first.  If the name is free, the original is backed up and the result lands under the new name.
+- Overwrite! is available only while the box still holds the name the program put there: the original's own name, or the last result's name after a save.  Editing the box turns it off, so Overwrite! can never go looking for a different file.  For an original in another format the untouched box already ends in `.jpg`, so Overwrite! removes the original and leaves the `.jpg`.
 - Overwrite! never adds a number, so a second click overwrites the same result file.
 - Numbering: any `~nn` counts as one of the program's own numbers, and several are summed (`name~1~4~7~2` starts as `name~14`).  For timestamp-style names (YYYY-MM-DD_HH-MM-SS), the sum is added to the seconds instead, and only the seconds ever change.  A taken name gets a number up to `~99`, and backups go up to `~999`.
 - Typing in the name box counts as an unsaved change when you leave a photo.

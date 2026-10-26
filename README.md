@@ -73,8 +73,8 @@ Every file Flyerize_gui writes is a separate file with its own name.  It rarely 
 
 Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.
 
-**What it does.**  It writes the result under the name in the box.  If a file with that name already exists, that file is overwritten.  If the name is free, the original is deleted instead.  Either way there is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
-
+**What it does.**  It writes the result under the name the box started with and replaces that file.  Before you touch the box, that is the original's own name, or the new file's name right after a Save New.  The button turns gray as soon as you edit the name box, and it comes back if you type the name back, so it never goes looking for some other file.  When the original is not a JPEG, the box starts with a `.jpg` name, and Overwrite! then deletes the original and leaves the `.jpg` in its place.  There is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
+ 
 **What it does not do: shrink a picture by itself.**  It is not a compressor.
 
 - Flyerize_gui never shrinks or resamples a picture.  The result has about as many pixels as the area you selected, and it is saved at high JPEG quality (95 by default).  A crop that covers most of the photo can come out the same size as the original, or even bigger.
@@ -128,7 +128,7 @@ When in doubt, use Save New, which keeps both files, or Replace, which keeps the
 
 ### Settings
 
-Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.  A dropdown there also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box once you have sent one, turns the reminders off.
+Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, and whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes.  A dropdown there also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box, once you have sent one, turns the reminders off.
 
 ### Where Flyerize_gui keeps its files
 
