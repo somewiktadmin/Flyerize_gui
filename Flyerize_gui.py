@@ -46,7 +46,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.13.2b"
+VERSION = "v0.1.13.3c"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.

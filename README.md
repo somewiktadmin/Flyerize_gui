@@ -1,4 +1,4 @@
-# Flyerize_gui v0.1.12 2026-10-25
+# Flyerize_gui v0.1.13.3c 2026-10-26
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
