@@ -41,7 +41,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 ## Navigation and Auto
 
-- Results made by Save New are inserted into the list right after their photo.  Back and Move can land on them.  Skip to Next and Auto go straight to the next original.
+- Results made by Save New are inserted into the list right after their photo.  Back and Move can land on them.  Skip to Next and Auto go straight to the next original.  Back from the first photo wraps around to the last, and so does jumping back 100.  Going ahead never wraps; 	finishing a long list does not make you start over.
 - Skip to Next is the most pressed button, since nearly every save is followed by it, so it sits close to the save buttons.
 - Auto advances after each save.  While it is on, the four save buttons show an arrow on pale green, and the navigation buttons keep their normal look because they stay fully valid.  Auto is kept away from Delete and Overwrite!.
 - Leaving a photo with unsaved changes asks first if the Confirm setting is on.  If it is off, the corners are quietly added to the Recents list instead.

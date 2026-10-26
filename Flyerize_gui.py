@@ -1497,6 +1497,7 @@ class App:
         self.added = 0                          # results added after this photo by Save New
         self.grid_mode = 0                      # index into GRID_MODES, changed with the G key
         self.result_entries = set()             # list entries that are Save New results: Next and Auto skip them
+        self.finish_shown = False               # the end-of-list dialog has been shown for this list
         self.selected = None
         self.targets, self.press, self.drag, self.moved, self.stroke = [], None, None, False, []
         self.panel, self.mag, self.mag_side, self.ghost_bar, self.ghost_label = None, None, None, None, None
@@ -2685,8 +2686,61 @@ class App:
         if mode == "replace_perm" and self.new_name.get() != self.name_baseline:
             self.say("Overwrite! is off while the name box has been edited.  Retype the original name, or use Save New or Replace.")
             return
-        if self.on_generate(mode) and self.auto.get() and self.next_index() is not None:
+        originals = sum(1 for j in range(len(self.paths)) if not self.is_result(j))
+        was_last = originals > 20 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
+        ok = self.on_generate(mode)
+        if ok and self.auto.get() and self.next_index() is not None:
             self.next_file()
+        elif ok and was_last:
+            self.finish_shown = True
+            self.root.after(200, lambda: self.show_finished(originals))
+
+    def show_finished(self, originals):
+        """The last photo of a long list was just saved. Congratulate, and offer another folder."""
+        win = tk.Toplevel(self.root)
+        win.title("All done")
+        win.transient(self.root)
+        result = {"v": "stay"}
+
+        def choose(v):
+            result["v"] = v
+            win.destroy()
+
+        tk.Label(win, text="That was the last of the %d photos.  Nicely done." % originals, padx=28, pady=18).pack()
+        row = tk.Frame(win)
+        row.pack(padx=20, pady=(0, 16))
+        for label, v in (("Choose another folder", "folder"), ("Stay right here", "stay"), ("Exit", "exit")):
+            tk.Button(row, text=label, width=20 if v == "folder" else 14, command=lambda v=v: choose(v)).pack(side="left", padx=4)
+        win.protocol("WM_DELETE_WINDOW", lambda: choose("stay"))
+        win.bind("<Escape>", lambda e: choose("stay"))
+        self.center_over_root(win)
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+        self.root.wait_window(win)
+        if result["v"] == "folder":
+            self.choose_folder()
+        elif result["v"] == "exit":
+            self.on_exit()
+
+    def choose_folder(self):
+        """Replace the list with the images in a folder the user picks."""
+        if not self.leave_ok():
+            return
+        here = os.path.dirname(os.path.abspath(self.path))
+        folder = filedialog.askdirectory(parent=self.root, title="Choose a folder of photos", initialdir=os.path.dirname(here) or here)
+        if not folder:
+            return
+        folder = os.path.normpath(folder)
+        paths = collect_paths([folder])
+        if not paths:
+            messagebox.showerror("Not found", "No images found in: %s" % folder)
+            return
+        self.paths = paths
+        self.result_entries = set()
+        self.finish_shown = False
+        self.load(0)
 
     def on_auto(self):
         self.settings["auto_advance"] = bool(self.auto.get())
