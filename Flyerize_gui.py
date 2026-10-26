@@ -46,7 +46,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.13"
+VERSION = "v0.1.13.2b"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1660,7 +1660,7 @@ class App:
         n = len(self.paths)
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
-        self.prev_btn.config(state="normal" if self.index > 0 else "disabled")
+        self.prev_btn.config(state="normal" if n > 1 else "disabled")
         self.go_btn.config(state="normal" if n > 1 else "disabled")
         self.auto_chk.config(state="normal" if n > 1 else "disabled")
         self.update_auto_look()
@@ -1715,12 +1715,18 @@ class App:
         self.load(self.paths.index(dest))
 
     def on_back(self):
-        if self.index > 0:
-            self.go_to(self.paths[self.index - 1])
+        """Back one photo. From the first photo it wraps around to the last one."""
+        n = len(self.paths)
+        if n > 1:
+            self.go_to(self.paths[(self.index - 1) % n])
 
     def go_by(self, count):
-        """Jump count photos (negative goes back), stopping at either end of the list."""
-        j = max(0, min(len(self.paths) - 1, self.index + count))
+        """Jump count photos. A negative count goes back and wraps around past the first photo to the end of the list
+        (from photo 30 of 500, back 100 lands on 430). Going ahead stops at the last photo."""
+        n = len(self.paths)
+        if n < 2:
+            return
+        j = (self.index + count) % n if count < 0 else min(n - 1, self.index + count)
         if j != self.index:
             self.go_to(self.paths[j])
 
@@ -2687,7 +2693,7 @@ class App:
             self.say("Overwrite! is off while the name box has been edited.  Retype the original name, or use Save New or Replace.")
             return
         originals = sum(1 for j in range(len(self.paths)) if not self.is_result(j))
-        was_last = originals > 20 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
+        was_last = originals > 10 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
         ok = self.on_generate(mode)
         if ok and self.auto.get() and self.next_index() is not None:
             self.next_file()
