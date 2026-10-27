@@ -1,10 +1,10 @@
 @echo off
 REM Builds Flyerize_gui.exe with PyInstaller and adds it to the Send To menu.
 REM Run this once from the folder that contains Flyerize_gui.py.
-python -m pip install -q opencv-python-headless numpy pillow pyinstaller
+python -m pip install -q opencv-python-headless numpy pillow pi-heif-decoder pyinstaller
 if errorlevel 1 goto fail
 REM '-w' is '--windowed' which is the same as '--noconsole'
-python -m PyInstaller -F -w -y -n Flyerize_gui Flyerize_gui.py
+python -m PyInstaller -F -w -y --collect-all pi_heif -n Flyerize_gui Flyerize_gui.py
 if errorlevel 1 goto fail
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('SendTo')+'\Flyerize_gui.lnk'); $s.TargetPath=(Resolve-Path 'dist\Flyerize_gui.exe').Path; $s.Save()"
 echo.

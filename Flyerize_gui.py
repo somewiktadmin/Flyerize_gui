@@ -36,6 +36,13 @@ import numpy as np
 from PIL import Image, ImageOps, ImageTk
 
 try:
+    import pi_heif
+    pi_heif.register_heif_opener()
+    HEIF_OK = True
+except Exception:       # the package is optional: without it, HEIC photos are not offered
+    HEIF_OK = False
+
+try:
     import winreg
 except ImportError:      # not Windows
     winreg = None
@@ -46,7 +53,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.13.3c"
+VERSION = "v0.1.14"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -123,6 +130,9 @@ BW_LIGHT_TO, BW_DARK_TO = 96 + 7, 160 - 7
 GHOST_PROMPT = " Either zorro or rectangle pattern was detected. \n Assigning all new corner x,y values."
 LINE_HIT = 8             # how close (screen pixels) a click must be to a side line to grab it
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
+if HEIF_OK:
+    IMAGE_EXTS |= {".heic", ".heif"}
+    IMAGE_TYPES[0] = ("Images", IMAGE_TYPES[0][1] + " *.heic *.heif")
 
 
 # ===== corner detection (first version) =====
@@ -432,6 +442,10 @@ def render_preview(img, corners, bends, crop, max_px=1400, max_canvas=20e6, fill
 
 
 # ===== files =====
+
+def is_heic(path):
+    return os.path.splitext(path)[1].lower() in (".heic", ".heif")
+
 
 def load_image(path):
     pil = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
@@ -1603,7 +1617,7 @@ class App:
         self.btn_bg, self.btn_fg = self.save_btn.cget("bg"), self.save_btn.cget("fg")
         Tooltip(self.save_btn, "Saves the result as a new file and leaves the original alone. If the name is taken, a number is added. Alt+S does the same.")
         Tooltip(self.replace_btn, "Saves the result under the name in the box and backs up whatever file has that name, or the original if the name is free. Settings says where the backup goes. Alt+A does the same.")
-        Tooltip(self.overwrite_btn, "Replaces this photo with the result. There is no backup and this cannot be undone. It is gray while the name box has been edited. Alt+D does the same.")
+        Tooltip(self.overwrite_btn, "Replaces this photo with the result. There is no backup and this cannot be undone. It is gray while the name box has been edited, and for HEIC photos. Alt+D does the same.")
         Tooltip(self.delete_btn, "Moves this photo aside as a backup and goes to the next one. Nothing is asked, and Settings says where the backup goes. The Delete key does the same.")
         Tooltip(self.rename_btn, "Renames this file to the name in the box without rewriting the picture. The file keeps its own extension, and a taken name gets a number. Alt+R does the same.")
         Tooltip(self.auto_chk, "In full directory mode, automatically advances to the next image after each file is saved.")
@@ -2317,10 +2331,12 @@ class App:
 
     def update_overwrite_state(self):
         """Overwrite! is available only while the box still holds the name the program put there. Typing a different
-        name turns it off, and typing that name back turns it on again."""
+        name turns it off, and typing that name back turns it on again. It is always off for a HEIC photo, so the
+        original (which cannot be saved again as HEIC) is never deleted."""
         btn = getattr(self, "overwrite_btn", None)
         if btn is not None:
-            btn.config(state="normal" if self.new_name.get() == self.name_baseline else "disabled")
+            on = self.new_name.get() == self.name_baseline and not is_heic(getattr(self, "path", ""))
+            btn.config(state="normal" if on else "disabled")
 
     def refresh_name(self):
         """The box starts at the original's name, with any ~nn numbers folded together (see folded_name). All three save
@@ -2689,6 +2705,9 @@ class App:
 
     def do_save(self, mode):
         """A save button was pressed. With Auto on, a successful save moves on to the next photo."""
+        if mode == "replace_perm" and is_heic(self.path):
+            self.say("Overwrite! is off for HEIC photos, so the original is never deleted.  Use Save New or Replace.")
+            return
         if mode == "replace_perm" and self.new_name.get() != self.name_baseline:
             self.say("Overwrite! is off while the name box has been edited.  Retype the original name, or use Save New or Replace.")
             return

@@ -1,4 +1,4 @@
-# Flyerize_gui v0.1.13.3c 2026-10-26
+# Flyerize_gui v0.1.14 2026-10-27
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -11,11 +11,11 @@ It starts by guessing where the edges are.  You nudge four corners until they si
 
 - Windows 10 (that is where it was built and tested)
 - Python 3 from python.org.  On the first installer screen, tick "Add python.exe to PATH".  The default options also include Tkinter, the window toolkit.
-- Three packages: OpenCV, NumPy and Pillow
+- Three packages: OpenCV, NumPy and Pillow, plus a fourth, pi-heif-decoder, only if you want to open iPhone HEIC photos
 
 Install the packages once, from a command prompt:
 
-    pip install opencv-python numpy pillow
+    pip install opencv-python numpy pillow pi-heif-decoder
 
 Prefer not to install Python at all?  Download `Flyerize_gui.exe` from the Releases page of this repository (the link is in the right-hand sidebar).  It runs on its own, and wherever this page says `python Flyerize_gui.py`, the .exe works the same way.  The .exe is not code signed, so Windows may show a "Windows protected your PC" screen the first time.  Click More info, then Run anyway.  Some antivirus programs are also suspicious of programs packaged this way.  The full source is in this repository, so you can read it or build the .exe yourself (see the end of this page).
 
@@ -27,7 +27,7 @@ Give it a photo, or a folder, or nothing at all:
     python Flyerize_gui.py "C:\Photos\Fence Banners"
     python Flyerize_gui.py
 
-With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone photos saved as HEIC are not read, so set the camera to Most Compatible or convert them first.
+With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone HEIC photos are read too when pi-heif-decoder is installed (the .exe includes it), and the result is saved as a JPEG.  Overwrite! stays gray for a HEIC photo, so the HEIC original is never deleted.
 
 A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
 
