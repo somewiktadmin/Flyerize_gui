@@ -53,7 +53,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.14"
+VERSION = "v0.1.15"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -442,10 +442,6 @@ def render_preview(img, corners, bends, crop, max_px=1400, max_canvas=20e6, fill
 
 
 # ===== files =====
-
-def is_heic(path):
-    return os.path.splitext(path)[1].lower() in (".heic", ".heif")
-
 
 def load_image(path):
     pil = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
@@ -1616,8 +1612,8 @@ class App:
         self.delete_btn.pack(side="left", padx=2)
         self.btn_bg, self.btn_fg = self.save_btn.cget("bg"), self.save_btn.cget("fg")
         Tooltip(self.save_btn, "Saves the result as a new file and leaves the original alone. If the name is taken, a number is added. Alt+S does the same.")
-        Tooltip(self.replace_btn, "Saves the result under the name in the box and backs up whatever file has that name, or the original if the name is free. Settings says where the backup goes. Alt+A does the same.")
-        Tooltip(self.overwrite_btn, "Replaces this photo with the result. There is no backup and this cannot be undone. It is gray while the name box has been edited, and for HEIC photos. Alt+D does the same.")
+        Tooltip(self.replace_btn, "Backs up the photo on screen, then saves the result under the name in the box. If that name belongs to a different file, a number is added. Settings says where the backup goes. Alt+A does the same.")
+        Tooltip(self.overwrite_btn, "Replaces the photo on screen with the result. There is no backup and this cannot be undone. The name box only names the result. Alt+D does the same.")
         Tooltip(self.delete_btn, "Moves this photo aside as a backup and goes to the next one. Nothing is asked, and Settings says where the backup goes. The Delete key does the same.")
         Tooltip(self.rename_btn, "Renames this file to the name in the box without rewriting the picture. The file keeps its own extension, and a taken name gets a number. Alt+R does the same.")
         Tooltip(self.auto_chk, "In full directory mode, automatically advances to the next image after each file is saved.")
@@ -1631,11 +1627,12 @@ class App:
         Tooltip(self.preview_btn, "Shows the corrected result over the main view. Click again, or press Esc, to go back. Alt+V does the same.")
         Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality and more.")
         Tooltip(exit_btn, "Closes Flyerize_gui. If there are unsaved changes it asks first, unless that is turned off in Settings.")
+        self.source_label = tk.Label(root, anchor="w", fg="#444444")
+        self.source_label.pack(fill="x", padx=10, pady=(2, 0))
         bar3 = tk.Frame(root)
         bar3.pack(fill="x", padx=8, pady=(0, 6))
         tk.Label(bar3, text="New name:").pack(side="left", anchor="n", pady=2)
         self.new_name = tk.StringVar()
-        self.new_name.trace_add("write", lambda *a: self.update_overwrite_state())
         self.name_baseline = ""                 # what the program last put in the box. Anything else is typing.
         self.name_entry = tk.Entry(bar3, textvariable=self.new_name, width=46)
         self.name_entry.pack(side="left", anchor="n", padx=(4, 12))
@@ -1672,6 +1669,7 @@ class App:
 
     def set_title(self):
         n = len(self.paths)
+        self.source_label.config(text="Source: %s" % os.path.basename(self.path))
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
         self.prev_btn.config(state="normal" if n > 1 else "disabled")
@@ -2327,16 +2325,6 @@ class App:
         """Put a name in the box. Whatever the program puts there is the baseline, and only a difference from it counts as typing."""
         self.new_name.set(text)
         self.name_baseline = text
-        self.update_overwrite_state()
-
-    def update_overwrite_state(self):
-        """Overwrite! is available only while the box still holds the name the program put there. Typing a different
-        name turns it off, and typing that name back turns it on again. It is always off for a HEIC photo, so the
-        original (which cannot be saved again as HEIC) is never deleted."""
-        btn = getattr(self, "overwrite_btn", None)
-        if btn is not None:
-            on = self.new_name.get() == self.name_baseline and not is_heic(getattr(self, "path", ""))
-            btn.config(state="normal" if on else "disabled")
 
     def refresh_name(self):
         """The box starts at the original's name, with any ~nn numbers folded together (see folded_name). All three save
@@ -2546,28 +2534,39 @@ class App:
     def plan_save(self, mode):
         """Work out which files to write. mode is new, replace_undo or replace_perm. Returns a dict with crop,
         backup (a file to move aside first) and remove (a file to delete first), or None if cancelled.
-        The box names the file that gets the result. Save New adds a number when that name is taken. Replace and
-        Overwrite! write exactly that name: a file already there is backed up (Replace) or overwritten (Overwrite!),
-        and when the name is free, the original is backed up (Replace) or removed (Overwrite!) instead."""
+        The box only names the new result. Save New, Replace and Overwrite! all add a number when that name belongs to
+        a different file, so no other file is touched. Replace backs up the photo on screen and Overwrite! removes it,
+        unless the name is the photo's own, in which case the result simply takes its place."""
         s = self.settings
         naming = s["naming_mode"]
         typed = self.typed_name()
         if typed is None:
             return None
         target = os.path.join(os.path.dirname(self.path), typed)
+        stem_here = os.path.splitext(typed)[0]
+        number_mode = "hds7" if (naming == "hds7" and HDS7_NAME.match(stem_here)) else "standard"
+
+        def same_file(a, b):
+            return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
         if mode in ("replace_undo", "replace_perm"):
             original = self.path if os.path.exists(self.path) else None
+            if original is None or not same_file(target, original):
+                if os.path.exists(target):          # the name belongs to a different file: number the result
+                    target = next((c for c in new_file_candidates(target, number_mode, self.photo_when) if not os.path.exists(c)), None)
+                    if target is None:
+                        messagebox.showerror("No free name", "Every numbered name is taken. Rename or move some of the saved files "
+                                             "outside Flyerize_gui, or copy the original and start again.")
+                        return None
+            same = original is not None and same_file(target, original)
             backup = remove = None
-            if os.path.exists(target):
-                if mode == "replace_undo":
-                    backup = target
-            elif original is not None:
+            if original is not None:
                 if mode == "replace_undo":
                     backup = original
-                else:
+                elif not same:
                     remove = original
             if mode == "replace_perm" and s["confirm_overwrite"]:
-                if os.path.exists(target):
+                if same:
                     message = "%s will be overwritten by the result." % os.path.basename(target)
                 elif remove is not None:
                     message = "%s will be deleted and the result saved as %s." % (os.path.basename(remove), os.path.basename(target))
@@ -2581,8 +2580,6 @@ class App:
                         s["confirm_overwrite"] = False
                         save_settings(s)
             return {"crop": target, "backup": backup, "remove": remove}
-        stem_here = os.path.splitext(typed)[0]
-        number_mode = "hds7" if (naming == "hds7" and HDS7_NAME.match(stem_here)) else "standard"
         cands = list(new_file_candidates(target, number_mode, self.photo_when))
 
         def taken(c):
@@ -2705,12 +2702,6 @@ class App:
 
     def do_save(self, mode):
         """A save button was pressed. With Auto on, a successful save moves on to the next photo."""
-        if mode == "replace_perm" and is_heic(self.path):
-            self.say("Overwrite! is off for HEIC photos, so the original is never deleted.  Use Save New or Replace.")
-            return
-        if mode == "replace_perm" and self.new_name.get() != self.name_baseline:
-            self.say("Overwrite! is off while the name box has been edited.  Retype the original name, or use Save New or Replace.")
-            return
         originals = sum(1 for j in range(len(self.paths)) if not self.is_result(j))
         was_last = originals > 10 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
         ok = self.on_generate(mode)

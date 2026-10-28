@@ -1,4 +1,4 @@
-# Flyerize_gui v0.1.14 2026-10-27
+# Flyerize_gui v0.1.15 2026-10-27
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -27,7 +27,7 @@ Give it a photo, or a folder, or nothing at all:
     python Flyerize_gui.py "C:\Photos\Fence Banners"
     python Flyerize_gui.py
 
-With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone HEIC photos are read too when pi-heif-decoder is installed (the .exe includes it), and the result is saved as a JPEG.  Overwrite! stays gray for a HEIC photo, so the HEIC original is never deleted.
+With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone HEIC photos are read too when pi-heif-decoder is installed (the .exe includes it), and the result is saved as a JPEG.
 
 A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
 
@@ -59,10 +59,10 @@ The first time Flyerize_gui starts, a short Help panel appears.  Press F1 any ti
 
 ## The save buttons
 
-The box labeled New name always shows the name the next save will use.  You can edit it before pressing any of these:
+The box labeled New name always shows the name the next save will use, and the Source line above it shows which file is on screen.  Replace, Overwrite! and Delete always act on that file, and the box only names the result.  You can edit it before pressing any of these:
 
 - **Save New** (Alt+S) writes the result as a new file and leaves the original alone.  If the name is taken, a number is added (`name~1`, `name~2`, and so on).
-- **Replace** (Alt+A) writes the result under the name in the box.  Whatever file already has that name is backed up first, or the original is backed up if the name is free.
+- **Replace** (Alt+A) backs up the photo on screen, then writes the result under the name in the box.  If that name belongs to a different file, the result gets a number, as Save New does.
 - **Overwrite!** (Alt+D) does the same with no backup, and asks first.  It cannot be undone, and it saves space only when the crop is small (see the next section).
 - **Rename** (Alt+R) renames the photo's file to the name in the box without rewriting the picture.  The file keeps its own extension.
 - **Delete** (the Delete key) moves the photo aside as a backup and goes to the next one.  Nothing is asked, and nothing is destroyed.  Backups are normally dot-prefixed copies (.trashed_name.jpg) next to the photo, and Settings can send them to a folder or the Recycle Bin instead.
@@ -73,7 +73,7 @@ Every file Flyerize_gui writes is a separate file with its own name.  It rarely 
 
 Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.
 
-**What it does.**  It writes the result under the name the box started with and replaces that file.  Before you touch the box, that is the original's own name, or the new file's name right after a Save New.  The button turns gray as soon as you edit the name box, and it comes back if you type the name back, so it never goes looking for some other file.  When the original is not a JPEG, the box starts with a `.jpg` name, and Overwrite! then deletes the original and leaves the `.jpg` in its place.  There is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
+**What it does.**  It deletes the photo on screen and saves the result under the name in the box.  When the name is the photo's own, the result simply takes its place.  When the original is not a JPEG, the box starts with a `.jpg` name, so Overwrite! deletes the original and leaves the `.jpg`, and that includes a HEIC photo.  If the name belongs to a different file, the result gets a number and that file is left alone.  There is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
  
 **What it does not do: shrink a picture by itself.**  It is not a compressor.
 

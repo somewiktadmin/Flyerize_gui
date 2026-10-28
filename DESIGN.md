@@ -31,9 +31,9 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 - **Save New** writes a new file and leaves the original alone.  **Replace** backs up first.  **Overwrite!** does not.  **Rename** renames the file without rewriting the picture and keeps its extension.  **Delete** moves the photo aside as a backup, with no question asked, because nothing is destroyed.
 - The name box starts at the original's name and always shows the name just written.  The program never rewrites it after a save, so repeated saves can produce names like `name~1~1`.  That is accepted, since every save is a separate file and nothing is lost.
-- Replace acts on the file the box names.  If it exists, it is backed up first.  If the name is free, the original is backed up and the result lands under the new name.
-- Overwrite! is available only while the box still holds the name the program put there: the original's own name, or the last result's name after a save.  Editing the box turns it off, so Overwrite! can never go looking for a different file.  For an original in another format the untouched box already ends in `.jpg`, so Overwrite! removes the original and leaves the `.jpg`.
-- Overwrite! never adds a number, so a second click overwrites the same result file.
+- The box only names the new result.  Replace, Overwrite! and Delete always act on the file on screen, which a Source line above the box names.  Replace backs it up first, and Overwrite! removes it.  A name that is the photo's own simply lets the result take its place.
+- If the name belongs to a different file, Save New, Replace and Overwrite! add a number, so no other file is touched.  On a result's own entry the name is its own, so a second click rewrites the same file.
+- Overwrite! on an original in another format, a HEIC photo included, removes that original and leaves the `.jpg`.  It is never grayed out, because when it is wanted it must really do it.
 - Numbering: any `~nn` counts as one of the program's own numbers, and several are summed (`name~1~4~7~2` starts as `name~14`).  For timestamp-style names (YYYY-MM-DD_HH-MM-SS), the sum is added to the seconds instead, and only the seconds ever change.  A taken name gets a number up to `~99`, and backups go up to `~999`.
 - Typing in the name box counts as an unsaved change when you leave a photo.
 - A save writes the result to a temporary file first, so a failure such as a full disk or a read-only folder or share stops before anything is changed.  The system's message appears in a dialog and the program stays open.
