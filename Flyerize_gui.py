@@ -53,7 +53,7 @@ SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}  
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.15"
+VERSION = "v0.1.15b"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1627,17 +1627,23 @@ class App:
         Tooltip(self.preview_btn, "Shows the corrected result over the main view. Click again, or press Esc, to go back. Alt+V does the same.")
         Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality and more.")
         Tooltip(exit_btn, "Closes Flyerize_gui. If there are unsaved changes it asks first, unless that is turned off in Settings.")
-        self.source_label = tk.Label(root, anchor="w", fg="#444444")
-        self.source_label.pack(fill="x", padx=10, pady=(2, 0))
         bar3 = tk.Frame(root)
         bar3.pack(fill="x", padx=8, pady=(0, 6))
-        tk.Label(bar3, text="New name:").pack(side="left", anchor="n", pady=2)
+        left = tk.Frame(bar3)                   # three lines to match the status: Source, the name box, the list position
+        left.pack(side="left", anchor="n")
+        self.source_label = tk.Label(left, anchor="w", pady=0)
+        self.source_label.pack(fill="x")
+        namerow = tk.Frame(left)
+        namerow.pack(fill="x")
+        tk.Label(namerow, text="New name:").pack(side="left", anchor="n", pady=2)
         self.new_name = tk.StringVar()
         self.name_baseline = ""                 # what the program last put in the box. Anything else is typing.
-        self.name_entry = tk.Entry(bar3, textvariable=self.new_name, width=46)
+        self.name_entry = tk.Entry(namerow, textvariable=self.new_name, width=46)
         self.name_entry.pack(side="left", anchor="n", padx=(4, 12))
         self.name_entry.bind("<Return>", lambda e: self.canvas.focus_set())
         Tooltip(self.name_entry, "The name the next save will use. Edit it before pressing Save New, Replace, Overwrite! or Rename.")
+        self.position_label = tk.Label(left, anchor="w", pady=0)
+        self.position_label.pack(fill="x")
         self.status = tk.Label(bar3, anchor="nw", justify="left", fg="#FFD700", bg="#000000", padx=6, pady=2, height=3)
         self.status.pack(side="left", fill="x", expand=True)
 
@@ -1669,7 +1675,8 @@ class App:
 
     def set_title(self):
         n = len(self.paths)
-        self.source_label.config(text="Source: %s" % os.path.basename(self.path))
+        self.source_label.config(text="Source: %s" % shorten_middle(os.path.basename(self.path), 52))
+        self.position_label.config(text="%d of %d" % (self.index + 1, n) if n > 1 else "")
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
         self.prev_btn.config(state="normal" if n > 1 else "disabled")
