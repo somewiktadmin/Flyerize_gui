@@ -56,7 +56,7 @@ CORNER_NAMES = ("TL", "TR", "BR", "BL")
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.17c"
+VERSION = "v0.1.17d"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1890,7 +1890,7 @@ class App:
 
     def set_title(self):
         n = len(self.paths)
-        self.source_label.config(text="Source: %s" % shorten_middle(os.path.basename(self.path), 52))
+        self.source_label.config(text=" Source File: %s" % shorten_middle(os.path.basename(self.path), 52))
         self.position_label.config(text="%d of %d" % (self.index + 1, n) if n > 1 else "")
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
@@ -2254,6 +2254,10 @@ class App:
         if w is not None and w.winfo_class() in ("Entry", "Spinbox", "TCombobox", "TSpinbox", "Listbox"):
             return
         k = e.keysym
+        if k.startswith("KP_") and k[3:].isdigit():     # the number pad's digits act like the top row's
+            k = k[3:]
+        elif k in ("KP_Insert", "KP_Begin"):            # the number pad's 0 and 5 with Num Lock off
+            k = "0" if k == "KP_Insert" else "5"
         ctrl, shift = bool(e.state & 0x4), bool(e.state & 0x1)
         step = 100 if ctrl else 10 if shift else 1
         if k in CORNER_KEYS:
