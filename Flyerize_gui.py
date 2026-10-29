@@ -23,9 +23,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import datetime
 import json
 import os
+import queue
 import re
 import sys
 import tempfile
+import threading
 import time
 import tkinter as tk
 import webbrowser
@@ -54,7 +56,7 @@ CORNER_NAMES = ("TL", "TR", "BR", "BL")
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.16"
+VERSION = "v0.1.17"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -126,8 +128,6 @@ GRID_MODES = (("Off", (), 0), ("Crosshairs", (0.5,), 1), ("Thirds", (1 / 3, 2 / 
 MAG_ZOOM_DEFAULT = 6.0   # starting zoom of the corner magnifier (1.0 is one photo pixel per screen pixel)
 ZOOM_MIN = 0.25          # how far out the magnifier and the expanded corner view may zoom
 ZOOM_MAX = 48.0
-BW_LIGHT_ABOVE, BW_DARK_BELOW = 160, 96          # BW/WB: tuned values
-BW_LIGHT_TO, BW_DARK_TO = 96 + 7, 160 - 7
 GHOST_PROMPT = " Either zorro or rectangle pattern was detected. \n Assigning all new corner x,y values."
 LINE_HIT = 8             # how close (screen pixels) a click must be to a side line to grab it
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
@@ -470,16 +470,9 @@ def save_output(arr, pil_in, src_path, out_path):
 
 # ===== output options, file names, the outline picture, and recognizing a drawn stroke =====
 
-def apply_output_options(arr, rot, mirror, bw=False):
-    """BW/WB (very light pixels become dark gray and very dark pixels become light gray), then rotate
-    counter-clockwise by rot degrees (0, 90, 180 or 270), then optionally mirror left to right."""
+def apply_output_options(arr, rot, mirror):
+    """Rotate counter-clockwise by rot degrees (0, 90, 180 or 270), then optionally mirror left to right."""
     out = arr
-    if bw:
-        out = arr.copy()
-        light = (arr[..., 0] > BW_LIGHT_ABOVE) & (arr[..., 1] > BW_LIGHT_ABOVE) & (arr[..., 2] > BW_LIGHT_ABOVE)
-        dark = (arr[..., 0] < BW_DARK_BELOW) & (arr[..., 1] < BW_DARK_BELOW) & (arr[..., 2] < BW_DARK_BELOW)
-        out[light] = BW_LIGHT_TO
-        out[dark] = BW_DARK_TO
     if rot:
         out = np.rot90(out, (rot // 90) % 4)
     if mirror:
@@ -987,6 +980,8 @@ SETTINGS_DEFAULTS = {
     "no_subsampling": True,         # keeps color sharp around text
     "mag_zoom": 6.0,
     "show_recents": True,
+    "filmstrip": True,              # the row of thumbnails under the picture
+    "thumb_height": 50,             # its thumbnail height in pixels (32 up to half the screen height)
     "help_shown": False,            # the first-run help has been shown (the registry keeps its own copy)
     "ops_count": 0,                 # operations done: saves, renames, deletes and DBG pictures (the registry keeps a copy)
     "coffee_shown": 0,              # the last coffee nag number that was shown (the registry keeps a copy)
@@ -1368,8 +1363,9 @@ class SettingsPanel(tk.Frame):
         super().__init__(app.root)
         self.app = app
         s = app.settings
-        body = tk.Frame(self)
+        body = self.body = tk.Frame(self)
         body.place(relx=0.5, rely=0.5, anchor="center")
+        self.bind("<Configure>", self.fit)
         head = tk.Frame(body)
         head.pack(anchor="w", pady=(0, 6))
         tk.Label(head, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(side="left")
@@ -1388,6 +1384,8 @@ class SettingsPanel(tk.Frame):
         self.fill_text = tk.StringVar(value=dict(FILL_CHOICES).get(s.get("fill_mode", "reflect"), FILL_CHOICES[0][1]))
         self.sharp = tk.BooleanVar(value=s["no_subsampling"])
         self.zoom = tk.StringVar(value="%d" % round(float(s["mag_zoom"]) * 100))
+        self.filmstrip = tk.BooleanVar(value=bool(s.get("filmstrip", True)))
+        self.thumb = tk.StringVar(value=str(s.get("thumb_height", 50)))
 
         def group(title, var, options):
             f = tk.LabelFrame(body, text=title, padx=10, pady=4)
@@ -1423,8 +1421,24 @@ class SettingsPanel(tk.Frame):
         sb.pack(side="left", padx=6)
         sb.bind("<Return>", lambda e: self.commit())
         sb.bind("<FocusOut>", lambda e: self.commit())
-        tk.Button(body, text="Close", width=12, height=2, command=app.close_panel).pack(pady=(10, 0))
+        lo, hi = thumb_limits(app.root)
+        tk.Checkbutton(row, text="Thumbnail row", variable=self.filmstrip, command=self.commit).pack(side="left", padx=(24, 0))
+        tk.Label(row, text="Thumbnail height").pack(side="left", padx=(8, 0))
+        sb = tk.Spinbox(row, from_=lo, to=hi, increment=10, width=5, textvariable=self.thumb, command=self.commit)
+        sb.pack(side="left", padx=6)
+        sb.bind("<Return>", lambda e: self.commit())
+        sb.bind("<FocusOut>", lambda e: self.commit())
+        x_btn = tk.Button(self, text="\u2715", relief="flat", bd=0, padx=8, command=app.close_panel)
+        x_btn.place(relx=1.0, x=-6, y=6, anchor="ne")
+        Tooltip(x_btn, "Close Settings. Esc does the same.")
         self.place(in_=app.canvas, x=0, y=0, relwidth=1, relheight=1)
+
+    def fit(self, event=None):
+        """Centered when it fits. A panel taller than the window is anchored at the top instead, so the heading is never cut off."""
+        if self.body.winfo_reqheight() > self.winfo_height():
+            self.body.place(relx=0.5, y=0, rely=0.0, anchor="n")
+        else:
+            self.body.place(relx=0.5, rely=0.5, y=0, anchor="center")
 
     def commit(self):
         s = self.app.settings
@@ -1440,8 +1454,16 @@ class SettingsPanel(tk.Frame):
             s["mag_zoom"] = min(ZOOM_MAX, max(ZOOM_MIN, float(self.zoom.get()) / 100.0))
         except ValueError:
             pass
+        s["filmstrip"] = bool(self.filmstrip.get())
+        try:
+            lo, hi = thumb_limits(self.app.root)
+            s["thumb_height"] = min(hi, max(lo, int(float(self.thumb.get()))))
+            self.thumb.set(str(s["thumb_height"]))
+        except ValueError:
+            pass
         save_settings(s)
         self.app.sync_recents_visibility()
+        self.app.sync_filmstrip()
 
 
 # ===== main window =====
@@ -1494,6 +1516,178 @@ class Tooltip:
             self.tip = None
 
 
+def thumb_limits(root):
+    """Smallest and largest thumbnail height: 32 pixels up to half the screen height."""
+    return 32, max(32, root.winfo_screenheight() // 2)
+
+
+def make_thumb(path, h):
+    """A small RGB copy of a photo for the filmstrip, at most h high and 2h wide. JPEGs decode at a fraction of their
+    size, which is what makes this quick. Runs on the filmstrip's worker thread."""
+    im = Image.open(path)
+    try:
+        im.draft("RGB", (h * 2, h * 2))
+    except Exception:
+        pass
+    im = ImageOps.exif_transpose(im)
+    im.thumbnail((h * 2, h))
+    return im.convert("RGB")
+
+
+class Filmstrip(tk.Canvas):
+    """A row of thumbnails under the picture: the current photo in the middle with a cyan frame, the photos before and
+    after it on either side, as many as fit across the window. A green bar under a thumbnail marks a result made by
+    Save New in this session. Clicking a thumbnail goes to that photo. Thumbnails are made on a worker thread, nearest
+    the current photo first, and the ones just past both ends are made ahead of time."""
+    GAP = 4
+    PAD = 5                     # room above and below the thumbnails for the frame and the green bar
+    PREFETCH = 10
+    CACHE_MAX = 600
+    CURRENT_COLOR = "#00e5ff"
+    RESULT_COLOR = "#2ecc71"
+
+    def __init__(self, parent, app):
+        super().__init__(parent, highlightthickness=0, bg="#202020", height=60)
+        self.app = app
+        self.h = 50
+        self.cache = {}                         # normalized path -> (PhotoImage, width, height), least recently used first
+        self.failed = set()
+        self.cells = []                         # (left, right, list index) of what is drawn
+        self.jobs, self.busy, self.gen = [], None, 0
+        self.lock, self.wake, self.done = threading.Lock(), threading.Event(), queue.Queue()
+        self.polling = False
+        threading.Thread(target=self.work, daemon=True).start()
+        self.bind("<Configure>", lambda e: self.refresh())
+        self.bind("<Button-1>", self.on_click)
+
+    @staticmethod
+    def key(path):
+        return os.path.normcase(os.path.abspath(path))
+
+    def set_height(self, h):
+        lo, hi = thumb_limits(self)
+        h = min(hi, max(lo, int(h)))
+        if h != self.h:
+            self.h = h
+            self.gen += 1                       # thumbnails still being made at the old size are thrown away
+            self.cache.clear()
+            self.failed.clear()
+        self.config(height=self.h + 2 * self.PAD)
+
+    def forget(self, path):
+        """A file was written or replaced: its thumbnail is stale."""
+        self.cache.pop(self.key(path), None)
+        self.failed.discard(self.key(path))
+
+    def work(self):
+        while True:
+            self.wake.wait()
+            with self.lock:
+                if not self.jobs:
+                    self.wake.clear()
+                    continue
+                path, h, gen = self.jobs.pop(0)
+                self.busy = path
+            try:
+                im = make_thumb(path, h)
+            except Exception:
+                im = None
+            self.done.put((path, h, gen, im))
+            with self.lock:
+                self.busy = None
+
+    def poll(self):
+        got = False
+        try:
+            while True:
+                path, h, gen, im = self.done.get_nowait()
+                if gen != self.gen:
+                    continue
+                if im is None:
+                    self.failed.add(self.key(path))
+                else:
+                    self.cache[self.key(path)] = (ImageTk.PhotoImage(im), im.width, im.height)
+                    while len(self.cache) > self.CACHE_MAX:
+                        self.cache.pop(next(iter(self.cache)))
+                got = True
+        except queue.Empty:
+            pass
+        if got:
+            self.refresh()
+        with self.lock:
+            more = bool(self.jobs) or self.busy is not None
+        if more or not self.done.empty():
+            self.after(50, self.poll)
+        else:
+            self.polling = False
+
+    def refresh(self):
+        app = self.app
+        if not app.settings.get("filmstrip", True):
+            return
+        self.delete("all")
+        self.cells = []
+        paths, cur, h = app.paths, app.index, self.h
+        W = self.winfo_width()
+        if W < 20 or not paths or not 0 <= cur < len(paths):
+            return
+        pad = (h * 4) // 3                      # a placeholder's width until its thumbnail has been made
+
+        def width_of(i):
+            e = self.cache.get(self.key(paths[i]))
+            return e[1] if e else pad
+
+        wc = width_of(cur)
+        x0 = (W - wc) // 2
+        layout = [(cur, x0)]
+        x, i = x0, cur - 1
+        while x > 0 and i >= 0:
+            x -= width_of(i) + self.GAP
+            layout.append((i, x))
+            i -= 1
+        x, i = x0 + wc + self.GAP, cur + 1
+        while x < W and i < len(paths):
+            layout.append((i, x))
+            x += width_of(i) + self.GAP
+            i += 1
+        shown = [i for i, _ in layout]
+        for i, x in layout:
+            k = self.key(paths[i])
+            e = self.cache.pop(k, None)
+            if e is not None:
+                self.cache[k] = e               # most recently used
+                self.create_image(x, self.PAD + (h - e[2]) // 2, anchor="nw", image=e[0])
+                w = e[1]
+            else:
+                w = pad
+                self.create_rectangle(x, self.PAD, x + w, self.PAD + h, fill="#303030", outline="#555555")
+                self.create_text(x + w // 2, self.PAD + h // 2, text="?" if k in self.failed else "...", fill="#999999")
+            if app.is_result(i):
+                self.create_line(x, self.PAD + h + 3, x + w, self.PAD + h + 3, fill=self.RESULT_COLOR, width=3)
+            if i == cur:
+                self.create_rectangle(x - 2, self.PAD - 2, x + w + 2, self.PAD + h + 2, outline=self.CURRENT_COLOR, width=3)
+            self.cells.append((x, x + w, i))
+        lo, hi = min(shown), max(shown)
+        wanted = shown + list(range(max(0, lo - self.PREFETCH), lo)) + list(range(hi + 1, min(len(paths), hi + 1 + self.PREFETCH)))
+        wanted.sort(key=lambda i: (abs(i - cur), i < cur))
+        with self.lock:
+            self.jobs = [(paths[i], h, self.gen) for i in wanted
+                         if self.key(paths[i]) not in self.cache and self.key(paths[i]) not in self.failed and paths[i] != self.busy]
+            if self.jobs:
+                self.wake.set()
+        if self.jobs and not self.polling:
+            self.polling = True
+            self.after(50, self.poll)
+
+    def on_click(self, e):
+        for left, right, i in self.cells:
+            if left - self.GAP // 2 <= e.x <= right + self.GAP // 2:
+                if i != self.app.index and 0 <= i < len(self.app.paths):
+                    self.app.go_to(self.app.paths[i])
+                break
+        self.app.canvas.focus_set()
+
+
 class App:
     HIT = 14      # how close (screen pixels) a click must be to a corner or purple dot
     SLOP = 4      # how far the pointer must move before a click becomes a drag
@@ -1509,7 +1703,6 @@ class App:
         self.rot = 0
         self.crop = tk.BooleanVar(value=True)
         self.mirror = tk.BooleanVar(value=False)
-        self.bw = tk.BooleanVar(value=False)
         self.zoom_var = tk.StringVar(value="100")
         self.auto = tk.BooleanVar(value=bool(self.settings["auto_advance"]))
         self.added = 0                          # results added after this photo by Save New
@@ -1529,7 +1722,7 @@ class App:
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         root.geometry("%dx%d" % (int(sw * 0.8), int(sh * 0.8)))      # a normal window: the OS decides where it opens
         root.minsize(900, 520)
-        mid = tk.Frame(root)
+        mid = self.mid = tk.Frame(root)
         mid.pack(fill="both", expand=True)
         self.recents_frame = tk.Frame(mid, width=220)
         self.recents_frame.pack_propagate(False)
@@ -1547,6 +1740,8 @@ class App:
             self.recents_frame.pack(side="right", fill="y")
         self.canvas = ZoomView(mid, self.img, on_change=self.on_view_change, bg="#202020")
         self.canvas.pack(side="left", fill="both", expand=True)
+        self.film = Filmstrip(root, self)
+        self.sync_filmstrip()
         bar1 = tk.Frame(root)
         bar1.pack(fill="x", padx=8, pady=(6, 0))
         self.preview_btn = tk.Button(bar1, text="PREVIEW", width=9, command=self.on_preview)
@@ -1577,17 +1772,15 @@ class App:
         self.rot_btn = tk.Button(bar1, text="Rotate CCW: 0", width=13, command=self.rotate)
         self.rot_btn.pack(side="left", padx=2)
         tk.Checkbutton(bar1, text="Mirror", variable=self.mirror).pack(side="left", padx=2)
-        tk.Checkbutton(bar1, text="BW/WB", variable=self.bw).pack(side="left", padx=2)
         tk.Button(bar1, text="DBG", command=self.on_dbg).pack(side="left", padx=2)
         hints = {
             "Zoom %": "How far the main view is zoomed, in percent. The mouse wheel zooms too, about the pointer.",
             "Fit": "Zooms the main view to show the whole photo.",
-            "Reset": "Finds the corners again automatically, and clears the bends, rotation, mirror and BW/WB. Ctrl-R does the same.",
+            "Reset": "Finds the corners again automatically, and clears the bends, rotation and mirror. Ctrl-R does the same.",
             "Zero": "Puts the four corners at the corners of the photo, with straight sides. The 0 key does the same.",
             "5%": "Puts the four corners 5 percent in from the photo's edges, with straight sides. The 5 key does the same.",
             "Crop to lines": "On cuts the result at your four sides. Off keeps the whole photo, straightened.",
             "Mirror": "Flips the result left to right. It changes only the preview and the saved result, not the main view.",
-            "BW/WB": "Experimental: invert bright and dark. Very light pixels become dark gray and very dark pixels become light gray. It changes only the preview and the saved result, not the main view.",
             "DBG": "Writes a copy of the original with the crop lines (and gridlines) drawn on it.",
         }
         for w in bar1.winfo_children():
@@ -1629,12 +1822,12 @@ class App:
         Tooltip(self.prev_btn, "Goes back one photo. Files saved with Save New are in the list, so you can go back to them. Alt+B or Ctrl+B does the same, and Ctrl+Shift+Alt+B jumps back 100.")
         Tooltip(self.go_btn, "Jumps ahead by a number of photos, or back with a negative number. Alt+M does the same.")
         Tooltip(self.next_btn, "Goes to the next original photo without saving anything. Alt+N or Ctrl+N does the same, and Ctrl+Shift+Alt+N jumps ahead 100.")
-        settings_btn = tk.Button(bar2, text="Settings", width=8, command=self.open_settings)
+        settings_btn = self.settings_btn = tk.Button(bar2, text="Settings", width=8, command=self.open_settings)
         settings_btn.pack(side="left", padx=(10, 2))
         exit_btn = tk.Button(bar2, text="EXIT", width=7, command=self.on_exit)
         exit_btn.pack(side="right")
         Tooltip(self.preview_btn, "Shows the corrected result over the main view. Click again, or press Esc, to go back. Alt+V does the same.")
-        Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality and more.")
+        Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality, the thumbnail row and more. Click again, or press Esc, to close them.")
         Tooltip(exit_btn, "Closes Flyerize_gui. If there are unsaved changes it asks first, unless that is turned off in Settings.")
         bar3 = tk.Frame(root)
         bar3.pack(fill="x", padx=8, pady=(0, 6))
@@ -1682,6 +1875,16 @@ class App:
 
     # one photo at a time
 
+    def sync_filmstrip(self):
+        """Show or hide the thumbnail row and apply its height, after a change in Settings."""
+        if self.settings.get("filmstrip", True):
+            self.film.set_height(self.settings.get("thumb_height", 50))
+            if not self.film.winfo_manager():
+                self.film.pack(fill="x", padx=8, pady=(4, 0), after=self.mid)
+            self.film.refresh()
+        else:
+            self.film.pack_forget()
+
     def set_title(self):
         n = len(self.paths)
         self.source_label.config(text="Source: %s" % shorten_middle(os.path.basename(self.path), 52))
@@ -1692,6 +1895,7 @@ class App:
         self.go_btn.config(state="normal" if n > 1 else "disabled")
         self.auto_chk.config(state="normal" if n > 1 else "disabled")
         self.update_auto_look()
+        self.film.refresh()
 
     def load(self, index):
         self.index, self.path = index, self.paths[index]
@@ -1702,7 +1906,6 @@ class App:
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.rot = 0
         self.mirror.set(False)
-        self.bw.set(False)
         self.rot_btn.config(text="Rotate CCW: 0")
         self.last_written = self.last_outline = None
         self.added = 0
@@ -1714,7 +1917,7 @@ class App:
         self.canvas.img, self.canvas.cache = self.img, (None, None)
         self.canvas.fit()
         # nothing is saved yet, so the baseline is the untouched picture: corners on the border, sides straight
-        self.saved = self.snapshot([[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]], {s: (0.5, 0.0) for s in SIDES}, True, 0, False, False)
+        self.saved = self.snapshot([[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]], {s: (0.5, 0.0) for s in SIDES}, True, 0, False)
         self.set_title()
         self.refresh_name()
         self.refresh_recents()
@@ -1767,17 +1970,16 @@ class App:
         if count:
             self.go_to(self.paths[self.index + count])
 
-    def snapshot(self, corners=None, bends=None, crop=None, rot=None, mirror=None, bw=None):
+    def snapshot(self, corners=None, bends=None, crop=None, rot=None, mirror=None):
         """Everything that affects the output, for spotting unsaved changes."""
         corners = self.corners if corners is None else corners
         bends = self.bends if bends is None else bends
         crop = self.crop.get() if crop is None else crop
         rot = self.rot if rot is None else rot
         mirror = self.mirror.get() if mirror is None else mirror
-        bw = self.bw.get() if bw is None else bw
         return (tuple(tuple(c) for c in np.round(np.asarray(corners, dtype=float), 3).tolist()),
                 tuple(sorted((k, round(t, 4), round(d, 3)) for k, (t, d) in bends.items())),
-                bool(crop), int(rot), bool(mirror), bool(bw))
+                bool(crop), int(rot), bool(mirror))
 
     # undo (Ctrl+Z): corners, sides, Zero, 5%, Reset, gestures and recent crops, for the photo on screen only
 
@@ -1785,12 +1987,12 @@ class App:
         """Call just before an edit changes the corners or bends. It starts a new undo step, unless this edit continues
         the run with the same key (the same corner, say) and the last edit was less than UNDO_IDLE_SECONDS ago. A key of
         None always starts a new step. Selecting another corner or clicking away ends a run. full also keeps Rotate,
-        Mirror and BW/WB, which only Reset clears."""
+        and Mirror, which only Reset clears."""
         now = time.monotonic()
         if key is None or key != self.undo_key or now - self.undo_time > UNDO_IDLE_SECONDS:
             step = {"corners": self.corners.copy(), "bends": dict(self.bends), "trace": self.trace, "label": label}
             if full:
-                step["extras"] = (self.rot, self.mirror.get(), self.bw.get())
+                step["extras"] = (self.rot, self.mirror.get())
             self.undo_stack.append(step)
         self.undo_key, self.undo_time = key, now
 
@@ -1809,7 +2011,7 @@ class App:
             cand = self.undo_stack.pop()
             extras = cand.get("extras")
             if (not np.array_equal(cand["corners"], self.corners) or cand["bends"] != self.bends
-                    or (extras is not None and extras != (self.rot, self.mirror.get(), self.bw.get()))):
+                    or (extras is not None and extras != (self.rot, self.mirror.get()))):
                 step = cand
                 break
         self.undo_key = None
@@ -1818,9 +2020,8 @@ class App:
             return
         self.corners, self.bends, self.trace = step["corners"], step["bends"], step["trace"]
         if "extras" in step:
-            self.rot, mirror, bw = step["extras"]
+            self.rot, mirror = step["extras"]
             self.mirror.set(mirror)
-            self.bw.set(bw)
             self.rot_btn.config(text="Rotate CCW: %d" % self.rot)
         self.after_edit()
         if isinstance(self.panel, CornerEditor):
@@ -2259,7 +2460,7 @@ class App:
             self.after_edit()
             return
         self.propose(np.round(np.array(initial_corners(self.img), dtype=np.float64)),
-                     "Start this file over and detect the corners again?  Rotate, mirror and BW/WB are cleared too.",
+                     "Start this file over and detect the corners again?  Rotate and mirror are cleared too.",
                      action=self.reset_current)
 
     def reset_current(self):
@@ -2268,7 +2469,6 @@ class App:
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.rot = 0
         self.mirror.set(False)
-        self.bw.set(False)
         self.rot_btn.config(text="Rotate CCW: 0")
         self.trace = None
         self.deselect()
@@ -2315,8 +2515,12 @@ class App:
         self.panel = CornerEditor(self, i)
 
     def open_settings(self):
+        if isinstance(self.panel, SettingsPanel):       # the Settings button is a toggle
+            self.close_panel()
+            return
         self.close_panel()
         self.panel = SettingsPanel(self)
+        self.settings_btn.config(relief="sunken")
 
     def close_panel(self):
         if self.panel is not None:
@@ -2326,6 +2530,7 @@ class App:
                 pass
             self.panel = None
             self.preview_btn.config(text="PREVIEW", relief="raised")
+            self.settings_btn.config(relief="raised")
             self.redraw_overlay()
             if self.selected is not None and self.mag is not None:
                 self.mag.set_vars()
@@ -2391,7 +2596,7 @@ class App:
         self.busy(True)
         try:
             out = render_preview(self.img, self.corners, self.bends, self.crop.get(), max_px=2000, fill=self.settings.get("fill_mode", "reflect"))
-            out = apply_output_options(out, self.rot, self.mirror.get(), self.bw.get())
+            out = apply_output_options(out, self.rot, self.mirror.get())
         except (MemoryError, ValueError, cv2.error) as ex:
             self.busy(False)
             messagebox.showerror("Preview failed", "Could not make the preview: %s" % ex)
@@ -2697,7 +2902,7 @@ class App:
         self.busy(True)
         try:
             out = apply_output_options(render(self.img, self.corners, self.bends, self.crop.get(), fill=self.settings.get("fill_mode", "reflect")), self.rot,
-                                       self.mirror.get(), self.bw.get())
+                                       self.mirror.get())
             write_image(out, self.pil, tmp, s["jpeg_quality"], s["no_subsampling"], times)   # written first, so a failure loses nothing
             note = ""
             if plan["backup"] is not None:
@@ -2765,6 +2970,8 @@ class App:
         """Keep the file list in step with what was written. Save New adds the new file right after this photo (and after
         the results already added for it), where only Previous and Go nnn land. If this photo's own file has moved away
         (Replace or Overwrite! under a new name), its entry follows the result."""
+        self.film.forget(crop)
+        self.film.forget(self.paths[self.index])
         if mode == "new":
             self.paths.insert(self.index + 1 + self.added, crop)
             self.added += 1
