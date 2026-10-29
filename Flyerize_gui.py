@@ -56,7 +56,7 @@ CORNER_NAMES = ("TL", "TR", "BR", "BL")
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.17b"
+VERSION = "v0.1.17c"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1744,7 +1744,6 @@ class App:
         self.canvas = ZoomView(mid, self.img, on_change=self.on_view_change, bg="#202020")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.film = Filmstrip(root, self)
-        self.sync_filmstrip()
         bar1 = tk.Frame(root)
         bar1.pack(fill="x", padx=8, pady=(6, 0))
         self.preview_btn = tk.Button(bar1, text="PREVIEW", width=9, command=self.on_preview)
@@ -1832,8 +1831,9 @@ class App:
         Tooltip(self.preview_btn, "Shows the corrected result over the main view. Click again, or press Esc, to go back. Alt+V does the same.")
         Tooltip(settings_btn, "Opens the settings: where backups go, how files are numbered, JPEG quality, the thumbnail row and more. Click again, or press Esc, to close them.")
         Tooltip(exit_btn, "Closes Flyerize_gui. If there are unsaved changes it asks first, unless that is turned off in Settings.")
-        bar3 = tk.Frame(root)
+        bar3 = self.bar3 = tk.Frame(root)
         bar3.pack(fill="x", padx=8, pady=(0, 6))
+        self.sync_filmstrip()          # the thumbnail row goes last, under the buttons and the status label
         left = tk.Frame(bar3)                   # three lines to match the status: Source, the name box, the list position
         left.pack(side="left", anchor="n")
         self.source_label = tk.Label(left, anchor="w", pady=0)
@@ -1883,7 +1883,7 @@ class App:
         if self.settings.get("filmstrip", True):
             self.film.set_height(self.settings.get("thumb_height", 50))
             if not self.film.winfo_manager():
-                self.film.pack(fill="x", padx=8, pady=(4, 0), after=self.mid)
+                self.film.pack(fill="x", padx=8, pady=(0, 6), after=self.bar3)
             self.film.refresh()
         else:
             self.film.pack_forget()
