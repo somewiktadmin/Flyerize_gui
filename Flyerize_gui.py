@@ -51,9 +51,10 @@ SUFFIX = "~"
 SIDES = ("top", "right", "bottom", "left")
 SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}   # corner indices, A then B
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
+UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.15b"
+VERSION = "v0.1.16"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -759,6 +760,8 @@ class CornerEditor(tk.Frame):
             x, y = int(round(float(self.xvar.get()))), int(round(float(self.yvar.get())))
         except ValueError:
             return
+        if [x, y] != [round(v) for v in self.point()]:
+            self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
         self.app.corners[self.idx] = [x, y]
         self.app.after_edit()
         self.render()
@@ -777,6 +780,7 @@ class CornerEditor(tk.Frame):
     def on_click(self, e):
         cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
         x, y = self.point()
+        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
         self.app.corners[self.idx] = [round(x + (e.x - cw / 2) / self.zoom), round(y + (e.y - ch / 2) / self.zoom)]
         self.set_vars()
         self.app.after_edit()
@@ -919,6 +923,8 @@ class Magnifier(tk.Frame):
             x, y = int(round(float(self.xvar.get()))), int(round(float(self.yvar.get())))
         except ValueError:
             return
+        if [x, y] != [round(v) for v in self.point()]:
+            self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
         self.app.corners[self.idx] = [x, y]
         self.app.after_edit(skip_magnifier=True)
         self.render()
@@ -936,11 +942,13 @@ class Magnifier(tk.Frame):
 
     def nudge(self, dx, dy):
         p = self.point()
+        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
         self.app.corners[self.idx] = [p[0] + dx, p[1] + dy]
         self.app.after_edit()
 
     def on_click(self, e):
         x, y = self.point()
+        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
         self.app.corners[self.idx] = [round(x + (e.x - self.VIEW_W / 2) / self.zoom), round(y + (e.y - self.VIEW_H / 2) / self.zoom)]
         self.app.after_edit()
 
@@ -1513,6 +1521,7 @@ class App:
         self.panel, self.mag, self.mag_side, self.ghost_bar, self.ghost_label = None, None, None, None, None
         self.recents_panel = None
         self.ghost, self.trace = None, None
+        self.undo_stack, self.undo_key, self.undo_time = [], None, 0.0      # Ctrl+Z history for the photo on screen
         self.last_written = self.last_outline = None
         self.saved = None
         self.help_win = self.coffee_win = self.coffee_img = None
@@ -1698,6 +1707,7 @@ class App:
         self.last_written = self.last_outline = None
         self.added = 0
         self.ghost, self.trace, self.selected = None, None, None
+        self.undo_stack, self.undo_key = [], None          # a new source photo starts with an empty undo history
         self.close_panel()
         self.hide_ghost_bar()
         self.hide_magnifier()
@@ -1768,6 +1778,56 @@ class App:
         return (tuple(tuple(c) for c in np.round(np.asarray(corners, dtype=float), 3).tolist()),
                 tuple(sorted((k, round(t, 4), round(d, 3)) for k, (t, d) in bends.items())),
                 bool(crop), int(rot), bool(mirror), bool(bw))
+
+    # undo (Ctrl+Z): corners, sides, Zero, 5%, Reset, gestures and recent crops, for the photo on screen only
+
+    def undo_begin(self, key=None, label="", full=False):
+        """Call just before an edit changes the corners or bends. It starts a new undo step, unless this edit continues
+        the run with the same key (the same corner, say) and the last edit was less than UNDO_IDLE_SECONDS ago. A key of
+        None always starts a new step. Selecting another corner or clicking away ends a run. full also keeps Rotate,
+        Mirror and BW/WB, which only Reset clears."""
+        now = time.monotonic()
+        if key is None or key != self.undo_key or now - self.undo_time > UNDO_IDLE_SECONDS:
+            step = {"corners": self.corners.copy(), "bends": dict(self.bends), "trace": self.trace, "label": label}
+            if full:
+                step["extras"] = (self.rot, self.mirror.get(), self.bw.get())
+            self.undo_stack.append(step)
+        self.undo_key, self.undo_time = key, now
+
+    def undo(self):
+        if self.drag is not None:
+            return
+        if isinstance(self.panel, (SettingsPanel, PreviewPanel)):
+            self.say("Close the panel first, then press Ctrl+Z.")
+            return
+        if self.ghost is not None:
+            self.cancel_ghost()
+            self.say("Proposal cancelled. Press Ctrl+Z again to undo the last change.")
+            return
+        step = None
+        while self.undo_stack:                  # a step that changed nothing (nudged right, then left) is skipped
+            cand = self.undo_stack.pop()
+            extras = cand.get("extras")
+            if (not np.array_equal(cand["corners"], self.corners) or cand["bends"] != self.bends
+                    or (extras is not None and extras != (self.rot, self.mirror.get(), self.bw.get()))):
+                step = cand
+                break
+        self.undo_key = None
+        if step is None:
+            self.say("Nothing to undo.")
+            return
+        self.corners, self.bends, self.trace = step["corners"], step["bends"], step["trace"]
+        if "extras" in step:
+            self.rot, mirror, bw = step["extras"]
+            self.mirror.set(mirror)
+            self.bw.set(bw)
+            self.rot_btn.config(text="Rotate CCW: %d" % self.rot)
+        self.after_edit()
+        if isinstance(self.panel, CornerEditor):
+            self.panel.set_vars()
+            self.panel.render()
+        left = len(self.undo_stack)
+        self.say("Undid: %s. %s" % (step["label"], "%d more to undo." % left if left else "That was the oldest change."))
 
     # files added by Send To while this window is open
 
@@ -1869,6 +1929,8 @@ class App:
     # selecting a corner and the docked magnifier
 
     def select(self, i):
+        if i != self.selected:
+            self.undo_key = None                # picking another corner ends the run on the previous one
         self.selected = i
         if self.mag is None:
             self.mag = Magnifier(self)
@@ -1877,6 +1939,7 @@ class App:
         self.redraw_overlay()
 
     def deselect(self):
+        self.undo_key = None
         if self.selected is None:
             return
         self.selected = None
@@ -1927,13 +1990,15 @@ class App:
     def on_ctrl_key(self, e):
         """Ctrl+N is Skip to Next and Ctrl+B is Back (Ctrl+B is left alone while a text box has the keyboard, where it moves
         the cursor). Every other Ctrl combination goes on to on_key, because Ctrl is the times 100 step for the arrows,
-        WASD, plus and minus, so Ctrl+S and Ctrl+D must stay nudges. Ctrl+R has its own binding."""
+        WASD, plus and minus, so Ctrl+S and Ctrl+D must stay nudges. Ctrl+R has its own binding. Ctrl+Z is undo."""
         k = e.keysym.lower()
         shift = bool(e.state & 0x1)         # the Shift key itself, not Caps Lock
         if k == "n" and not shift:
             self.on_skip()
         elif k == "b" and not shift and not self.typing(e):
             self.on_back()
+        elif k == "z" and not shift and not self.typing(e):
+            self.undo()
         else:
             return self.on_key(e)
         return "break"
@@ -2005,6 +2070,7 @@ class App:
                 self.say("Pick a corner first with the keys 1 to 4, or click one.")
                 return
             p = self.corners[self.selected]
+            self.undo_begin(("corner", self.selected), "%s corner" % CORNER_NAMES[self.selected])
             self.corners[self.selected] = [p[0] + dx * step, p[1] + dy * step]
             self.after_edit()
 
@@ -2038,6 +2104,7 @@ class App:
             if np.dot(new[b] - new[a], c[b] - c[a]) <= 0:
                 self.say("It cannot shrink any further.")
                 return
+        self.undo_begin(("grow",), "all sides in or out")
         self.corners = new
         self.after_edit()
 
@@ -2061,6 +2128,7 @@ class App:
 
     def on_down(self, e):
         self.canvas.focus_set()      # keys 1 to 4, 0, 5 and the arrows go to the picture, not to a box clicked earlier
+        self.undo_key = None         # a new mouse press ends any run of keypresses
         self.press, self.moved, self.drag = (e.x, e.y), False, None
         h = self.hit(e)
         if h is None:
@@ -2086,6 +2154,12 @@ class App:
             if abs(e.x - self.press[0]) + abs(e.y - self.press[1]) <= self.SLOP:
                 return
             self.moved = True
+            if self.drag[0] == "corner":        # one undo step per drag, started at its first movement
+                self.undo_begin(None, "%s corner" % CORNER_NAMES[self.drag[1]])
+            elif self.drag[0] == "bend":
+                self.undo_begin(None, "%s bend" % self.drag[1])
+            elif self.drag[0] == "line":
+                self.undo_begin(None, "%s side" % self.drag[1])
         kind = self.drag[0]
         if kind == "blank":
             if self.canvas.fit_mode:
@@ -2128,6 +2202,7 @@ class App:
     def on_right(self, e):
         h = self.hit(e)
         if h is not None and h[0] == "bend":
+            self.undo_begin(None, "%s bend straightened" % h[1])
             self.bends[h[1]] = (0.5, 0.0)
             self.redraw_overlay()
 
@@ -2155,13 +2230,13 @@ class App:
             return
         step = max(1, len(self.stroke) // 200)
         stroke_img = [tuple(self.canvas.to_image(x, y)) for x, y in self.stroke[::step]]
-        self.propose(quad, GHOST_PROMPT, stroke=stroke_img)
+        self.propose(quad, GHOST_PROMPT, stroke=stroke_img, label="drawn shape")
         self.say("Straight sides only: applying clears any bends.")
 
     # proposals: a ghost outline with Apply and Cancel. Gestures, Zero, 5% and Reset all use it.
 
-    def propose(self, quad, text, stroke=None, action=None):
-        self.ghost = {"quad": np.array(quad, dtype=np.float64), "stroke": stroke, "action": action}
+    def propose(self, quad, text, stroke=None, action=None, label=""):
+        self.ghost = {"quad": np.array(quad, dtype=np.float64), "stroke": stroke, "action": action, "label": label}
         if not self.settings["confirm_actions"]:
             self.apply_ghost()
             return
@@ -2170,11 +2245,11 @@ class App:
 
     def propose_zero(self):
         H, W = self.img.shape[:2]
-        self.propose(borderCorners_array(W, H), "Set all four corners to the image border?  Sides become straight.")
+        self.propose(borderCorners_array(W, H), "Set all four corners to the image border?  Sides become straight.", label="Zero")
 
     def propose_inset(self):
         H, W = self.img.shape[:2]
-        self.propose(inset_corners(W, H), "Set all four corners 5% in from the image border?  Sides become straight.")
+        self.propose(inset_corners(W, H), "Set all four corners 5% in from the image border?  Sides become straight.", label="5%")
 
     def propose_reset(self):
         self.say("Finding corners again...")
@@ -2188,6 +2263,7 @@ class App:
                      action=self.reset_current)
 
     def reset_current(self):
+        self.undo_begin(None, "Reset", full=True)
         self.corners = np.round(np.array(initial_corners(self.img), dtype=np.float64))
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.rot = 0
@@ -2221,6 +2297,7 @@ class App:
             g["action"]()
             self.after_edit()
             return
+        self.undo_begin(None, g.get("label") or "new corners")
         self.corners = np.array(g["quad"], dtype=np.float64)
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.trace = (g["stroke"], self.corners.copy()) if g["stroke"] else None
@@ -2278,6 +2355,7 @@ class App:
 
     def apply_recent(self, entry):
         c = entry["c"]
+        self.undo_begin(None, "recent crop")
         self.corners = np.array([[c[0], c[1]], [c[2], c[3]], [c[4], c[5]], [c[6], c[7]]], dtype=np.float64)
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.after_edit()
