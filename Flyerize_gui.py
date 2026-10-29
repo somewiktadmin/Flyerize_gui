@@ -56,7 +56,7 @@ CORNER_NAMES = ("TL", "TR", "BR", "BL")
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.17"
+VERSION = "v0.1.17b"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1333,8 +1333,11 @@ def make_undo_copy(path, method):
 
 def write_image(arr, pil_in, out_path, quality=95, no_subsampling=True, times=None):
     res = Image.fromarray(arr)
+    icc = pil_in.info.get("icc_profile")        # the colors are not converted, so the source's profile still describes them
+    extra = {"icc_profile": icc} if icc else {}
     if out_path.lower().endswith((".jpg", ".jpeg")):
         kw = {"quality": int(quality)}
+        kw.update(extra)
         if no_subsampling:
             kw["subsampling"] = 0
         try:
@@ -1342,7 +1345,7 @@ def write_image(arr, pil_in, out_path, quality=95, no_subsampling=True, times=No
         except Exception:
             res.save(out_path, **kw)
     else:
-        res.save(out_path)
+        res.save(out_path, **extra)
     if times:
         os.utime(out_path, times)
 
