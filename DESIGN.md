@@ -20,9 +20,12 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Corners, sides and gestures
 
 - Corners drag like every other handle.  Early testing showed people instinctively try to drag them, and click-only red corners next to draggable purple dots was inconsistent.
-- X and Y stay visible and editable in a docked magnifier that remains up after a drag.  A larger magnifier view is one click away for fine work.
+- X and Y stay visible and editable in a corner panel that remains up after a drag.  The docked panel and the large one are the same panel, with the same controls, differing only in the size of the picture.  The panel also lists the other three corners, read-only, and has a pad of eight arrows so a corner can be nudged with the mouse as well as the keys.  Shift and Ctrl change the pad's step (10 and 100) and tint its buttons while held, because a tint alone is easy to miss, so the step is also written under the pad.
+- **Corner moves or sides move.**  Moving only one corner is right for freeform artwork and oval logos.  Moving a corner together with its two neighbors, as when resizing a rectangle by a corner, is right for the many days that are all rectangles, and it was the preferred mode of the author's earlier Java tool (Scissor).  Both are essential, so both are one key away (L), and the difference is visible: red dots for corner moves, blue squares for sides move, with the opposite corner staying a red dot as the anchor.  The shape carries the meaning and the color only backs it up.  The same glyphs appear on the pad's center button and beside the other corners in the panel.
+- Sides move splits a move into its sideways part and its up-and-down part.  The corner that shares a left or right side follows the sideways part, and the corner that shares a top or bottom side follows the other, so the opposite corner never moves.  The rule is the same for a drag, a click in the panel, the X and Y boxes, the pad and the keys, because a lock that only some controls obey would be a trap.  Shift is not used as a momentary override for it, since Shift already means a bigger step everywhere else.
+- The mode belongs to the session, not to a panel, and it is visible all the time in the handles, so it cannot be forgotten without being noticed.  Settings sets which mode the program starts in, because some days are all rectangles and some are not.
 - Each side bends with one purple dot, which slides along its line.  Right-click straightens that side.  One curve per side was judged enough, and two dots per side was rejected as overkill.
-- Side drags lock to the perpendicular direction, because missing by a few pixels in the wrong direction leaves a sliver of border on one corner.  Shift unlocks the drag.
+- Side drags lock to the perpendicular direction, because missing by a few pixels in the wrong direction leaves a sliver of border on one corner.  Shift unlocks the drag.  Sides move (above) is the same idea for corners: the freedom to swing one side alone invariably costs several more corner edits afterward.
 - Start gestures are valid only while the whole photo is in view, never while zoomed in.  They are a closed rectangle, a Z, or a corner-to-corner slash, and they set straight sides and clear any bends.
 - Two validation rules decide whether a stroke counts.  The stroke should be at least about 30 screen pixels across, which stops accidental clicks.  The shape it proposes should also cover at least about 1 percent of the photo's area.  Both are floors chosen for now and open to change if feedback says so.  The 1 percent floor is deliberate.  For a small flyer in a big photo, the intended workflow is to draw a larger box first, then zoom with the mouse wheel and drag the sides and corners into place.
 - A gesture shows a ghost of the proposed corners with Apply and Cancel, rather than applying silently and offering undo afterward.  The Confirm setting turns these prompts off for people who want speed.
@@ -51,7 +54,8 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 - Alt is the main modifier.  A, S and D are Replace (Amend), Save New and Overwrite! (Destructive).  B, N and M are Back, Skip to Next and Move.  R renames and V toggles the preview.  Ctrl+B and Ctrl+N are alternates, and Ctrl+Shift+Alt with B or N jumps 100.
 - Ctrl is the times-100 step for the arrow keys, WASD and plus and minus, so Ctrl letter shortcuts are avoided.  Ctrl+R stays Reset.
-- F2 and Ctrl+Z are deliberately untouched.  F2 means rename in Explorer, and Ctrl+Z is reserved in case a real undo is ever added.
+- F2 is deliberately untouched, because it means rename in Explorer.  Ctrl+Z is undo (see Undo).  There is no redo, and none was wanted.
+- L switches between corner moves and sides move.  The number pad's digits are treated like the top row's.
 - F1 opens the Help panel, which also appears once on the first run.
 - Shortcuts that would clash with typing are ignored while a text box has the keyboard.
 - There are no extra safety bumpers on the shortcuts.  Over-protection was explicitly declined, repeatedly.
@@ -62,10 +66,29 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 - A running count of saves, renames, deletes and DBG pictures is kept in the same two places, and the larger number wins.  A coffee reminder appears at fixed counts, once each, and never in the same session as the first-run help.  It is an honor system: ticking the box, in the reminder or in Settings, turns it off for good.
 - `Flyerize_gui.log` records each save, backup, rename, delete and DBG picture with a readable timestamp and full paths, plus a START line for each run and a line when files are handed to a running window and when that window picks them up.  It starts a fresh file at about 1 MB and keeps one `.old` file.  If Windows redirects the settings folder (Microsoft Store Python), the script and the .exe may each keep their own log.
 
+## Undo
+
+- Ctrl+Z undoes corner and side edits for the photo on screen, with no limit.  The history is dropped when you go to another photo or exit.
+- A step is one drag, or one run of keypresses on the same corner (the run ends after a pause of a few seconds, or when another corner is picked or you click away), or one Zero, 5%, Reset, gesture, recent crop or straightening of a bend.  Reset's step also restores rotation and mirror, which only Reset clears.  A step that changed nothing is skipped, so no keypress is wasted.
+- It does not cover saves, renames or deletes.  Bringing back a deleted photo (Undelete) was judged more trouble than it is worth, since the Recycle Bin, the `.originals` folder and the `.trashed_` files already hold the originals.  It will be reconsidered if anyone asks.
+
+## The thumbnail row
+
+- A row under the status lines shows the photos around the current one as wide as the window allows, with the current photo framed and the results of Save New marked with a green bar.  Clicking a thumbnail goes to that photo.  Results from earlier sessions cannot be told apart, so they look like originals.
+- Thumbnails are made on a worker thread, nearest the current photo first, with a few beyond each end made ahead of time.  JPEGs are decoded at a fraction of their size, which is what makes it quick.
+- Screen height is scarce, so the row has a Settings checkbox and a height setting (32 pixels up to half the screen height).  Turning it off also stops the thumbnail work.  It is the last widget in the window, so when the window is short it is the first to disappear.
+
+## Settings panel
+
+- Settings is a panel over the picture, not a window, so it has no title bar.  The Settings button toggles it, and a flat ✕ at the top right and Esc close it.  There is no Close button.
+- If the panel is taller than the window it is anchored at the top, so the heading is never cut off.
+
 ## Output options
 
 - Crop to lines cuts the result at your four sides.  Off keeps the whole photo, straightened.
-- Rotate, Mirror and BW/WB change only the preview and the saved result.  BW/WB is experimental, and its thresholds were tuned by eye (about 64 and 160).
+- Rotate and Mirror change only the preview and the saved result.  The experimental BW/WB option was removed in v0.2.0.
+- The result keeps the source photo's ICC color profile when it has one.  The colors are not converted, so the profile still describes them.
+- The line that gives the place in the list also shows the photo's size (`Started`) and the size the result will have (`Saving`).  Both come from the same code that writes the file, so they cannot disagree.  The size is never entered or scaled, because it follows from the four corners.  Spinners for width and height, as the author's earlier tool had, were judged not worth having, while seeing the size was needed.  Bends are not counted in it, only the straight distances between corners.
 - DBG writes one `~dbg` picture of the original with your lines drawn on it, including the grid when it is on, and the start stroke if no corner or side has moved since.  It is a throwaway.  Pressing it again replaces the same file with no backup, and it is not a save.
 - Empty corner fill decides what covers a corner that lies outside the photo when you pull a corner past the edge.  The choices are mirror the edge (the default), repeat the edge, or black.  It matters in perhaps one photo in fifty to a hundred, and no default suits every image, so it is a dropdown in Settings, inconvenient enough that it stays a rare choice.  The magnifier and main view keep showing black or gray outside the photo on purpose, so the real edge stays visible.
 - The grid is curved to follow the bends in the main view, and straight in the preview when Crop to lines is on.
@@ -73,14 +96,15 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Deliberately not built
 
 - Background removal and batch-first workflows.
-- Interface translation.  If it ever happens, the plan is to use standard interface terms so existing glossaries can be reused.
 - A second-pass image comparison is a separate project.
-- Two purple dots per side.  One curve per side has been enough so far, the Bezier math is already unintuitive, and a second dot would add to that.  No flag-wave pattern has needed it yet.  It may be revisited someday.
-- Free rotation by degrees (0 to 360) for the selection rectangle.  Rotation is 90, 180 and 270 only.  Free rotation was rejected at first, and it may be reconsidered someday.
+- PDF input; a one-line batch file in the Send To folder can turn a PDF page into a JPEG first.  First attempt at integrating it, was crashy bloat.  Maybe someday.
 - The naming of backups (dot prefix versus other schemes) is parked, and the dot prefix stays for now.
 
-## Maybe in the near future
+## Maybe in the future
 
-- A thumbnail row: a strip below the status lines showing the photos around the current one, click to jump, with a Settings checkbox to turn it off.
-- Ctrl+Z undo, with its scope still undecided.
-- Undelete from `.trashed_` backups and from the `.originals` folder, renumbering the restored file if the name is taken.
+- WinXP style "File, Edit, Help" menus at the top?  File open would select a new folder, file close, file save would save only _which_ file you left off at.  Edit would have jumptos for TL, TR, BL, BR merely opening that CornerEditor().  
+- Undelete from `.trashed_` backups and from the `.originals` folder, renumbering the restored file if the name is taken.  Parked until someone asks.
+- Free rotation by degrees (0 to 360) for the selection rectangle.  Rotation is 90, 180 and 270 only.  Free rotation was rejected at first but it will be reconsidered.
+- Interface translation.  If it ever happens, the plan is to use standard interface terms so existing glossaries can be reused.
+- Entering the output size, or fitting the result to a paper size.  Showing the size is enough.  Placing the picture on a page is probably a different program.
+- Two purple dots per side.  One curve per side has been enough so far, the Bezier math is already unintuitive, and a second dot would add to that.  No flag-wave pattern has needed it yet.  It will be revisited someday.

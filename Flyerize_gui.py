@@ -53,10 +53,19 @@ SUFFIX = "~"
 SIDES = ("top", "right", "bottom", "left")
 SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}   # corner indices, A then B
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
+CORNER_LONG = ("Top left", "Top right", "Bottom right", "Bottom left")
+SIDES_COLOR = "#1e6bff"                 # blue squares: the corner takes its two neighbors with it (sides move)
+DX_PARTNER = (3, 2, 1, 0)               # the corner that shares a left or right side with this one, and follows a sideways move
+DY_PARTNER = (1, 0, 3, 2)               # the corner that shares a top or bottom side with this one, and follows an up or down move
+KEY_ORDER = (0, 1, 3, 2)                # TL TR BL BR, the order of the keys 1 to 4
+PAD_CELLS = (("\u2196", -1, -1), ("\u2191", 0, -1), ("\u2197", 1, -1),
+             ("\u2190", -1, 0), None, ("\u2192", 1, 0),
+             ("\u2199", -1, 1), ("\u2193", 0, 1), ("\u2198", 1, 1))
+STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Shift or Ctrl is held
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.1.17d"
+VERSION = "v0.2.0"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -697,54 +706,171 @@ class ZoomView(tk.Canvas):
 
 # ===== inner panels (they cover the main view, so nothing opens in a random place) =====
 
-class CornerEditor(tk.Frame):
-    """The large corner view (the picture takes 75 percent of the window), opened from the magnifier's Expand button."""
+class CornerPanel(tk.Frame):
+    """The corner panel. Docked it floats over the main view with the corner magnified; expanded (the Expand button) the
+    magnified picture takes 75 percent of the window. The same controls sit under or beside the picture: X and Y,
+    Zoom, the other three corners, and a pad of eight arrows around the sides-move button. The arrows step 1, with
+    Shift 10 and with Ctrl 100, like the keys."""
+    VIEW_W, VIEW_H = 280, 200
 
-    def __init__(self, app, idx):
-        super().__init__(app.root)
-        self.app, self.idx = app, idx
+    def __init__(self, app, idx=0, expanded=False):
+        super().__init__(app.root, bd=0 if expanded else 2, relief="flat" if expanded else "ridge")
+        self.app, self.idx, self.expanded = app, idx, expanded
         self.zoom = float(app.settings.get("mag_zoom", MAG_ZOOM_DEFAULT))
         self.updating = False
-        self.columnconfigure(0, weight=3, uniform="cols")
-        self.columnconfigure(1, weight=1, uniform="cols")
-        self.rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, bg="black", highlightthickness=0)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        panel = tk.Frame(self)
-        panel.grid(row=0, column=1, sticky="nsew", padx=14, pady=14)
-        tk.Label(panel, text="Corner %s" % CORNER_NAMES[idx], font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
-        tk.Button(panel, text="OK", width=14, height=2, font=("TkDefaultFont", 11, "bold"),
-                  command=app.close_panel).pack(fill="x", pady=(10, 4))
         self.xvar, self.yvar, self.zvar = tk.StringVar(), tk.StringVar(), tk.StringVar()
-        for label, var, lo, hi, step, cmd in (("X", self.xvar, -100000, 100000, 1, self.on_spin),
-                                              ("Y", self.yvar, -100000, 100000, 1, self.on_spin),
-                                              ("Zoom %", self.zvar, int(ZOOM_MIN * 100), int(ZOOM_MAX * 100), 25, self.on_zoom_spin)):
-            row = tk.Frame(panel)
-            row.pack(fill="x", pady=(12, 0))
-            tk.Label(row, text=label, width=8, anchor="w").pack(side="left")
-            sb = tk.Spinbox(row, from_=lo, to=hi, increment=step, width=8, textvariable=var, format="%.0f", command=cmd)
+        self.pad_job = None
+        self.pad_buttons = []
+        if expanded:
+            self.columnconfigure(0, weight=3, uniform="cols")
+            self.columnconfigure(1, weight=1, uniform="cols")
+            self.rowconfigure(0, weight=1)
+            self.canvas = tk.Canvas(self, bg="black", highlightthickness=0)
+            self.canvas.grid(row=0, column=0, sticky="nsew")
+            holder = tk.Frame(self)
+            holder.grid(row=0, column=1, sticky="nsew", padx=14, pady=14)
+        else:
+            holder = self
+        head = tk.Frame(holder)
+        head.pack(fill="x", padx=0 if expanded else 6, pady=(0, 6) if expanded else (4, 0))
+        self.title_label = tk.Label(head, anchor="w", font=("TkDefaultFont", 12 if expanded else 10, "bold"))
+        self.title_label.pack(side="left")
+        x_btn = tk.Button(head, text="\u2715", relief="flat", bd=0, padx=6, command=self.close)
+        x_btn.pack(side="right")
+        Tooltip(x_btn, "Close this panel. Esc does the same.")
+        if not expanded:
+            self.canvas = tk.Canvas(self, width=self.VIEW_W, height=self.VIEW_H, bg="black", highlightthickness=0, cursor="crosshair")
+            self.canvas.pack(padx=6, pady=4)
+        else:
+            self.canvas.config(cursor="crosshair")
+        controls = tk.Frame(holder)
+        controls.pack(fill="x", padx=0 if expanded else 6, pady=(6, 0) if expanded else (0, 6))
+        left = tk.Frame(controls)
+        left.pack(side="left", anchor="n")
+        right = tk.Frame(controls)
+        right.pack(side="left", anchor="n", padx=(10, 0))
+        for label, var in (("X", self.xvar), ("Y", self.yvar)):
+            row = tk.Frame(left)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=label, width=2, anchor="w").pack(side="left")
+            sb = tk.Spinbox(row, from_=-100000, to=100000, increment=1, width=7, textvariable=var, command=self.on_spin)
             sb.pack(side="left")
-            sb.bind("<Return>", lambda e, c=cmd: c())
-            sb.bind("<FocusOut>", lambda e, c=cmd: c())
-        tk.Label(panel, anchor="w", justify="left", wraplength=200, fg="#555555",
-                 text="Click the picture to place the corner. Mouse wheel zooms. Esc also closes.").pack(fill="x", pady=(16, 0))
-        self.canvas.bind("<Configure>", lambda e: self.render())
+            sb.bind("<Return>", lambda e: (self.on_spin(), self.app.canvas.focus_set()))     # the keys work again, so does L
+            sb.bind("<FocusOut>", lambda e: self.on_spin())
+        row = tk.Frame(left)
+        row.pack(fill="x", pady=1)
+        tk.Label(row, text="Zoom").pack(side="left")
+        zs = tk.Spinbox(row, from_=int(ZOOM_MIN * 100), to=int(ZOOM_MAX * 100), increment=25, width=5, textvariable=self.zvar, command=self.on_zoom_spin)
+        zs.pack(side="left", padx=4)
+        zs.bind("<Return>", lambda e: (self.on_zoom_spin(), self.app.canvas.focus_set()))
+        zs.bind("<FocusOut>", lambda e: self.on_zoom_spin())
+        if not expanded:
+            tk.Button(row, text="Expand", command=lambda: app.open_expanded(self.idx)).pack(side="left", padx=2)
+        self.others = []
+        for _ in range(3):
+            r = tk.Frame(left)
+            r.pack(fill="x")
+            g = tk.Label(r, width=2)
+            g.pack(side="left")
+            t = tk.Label(r, anchor="w")
+            t.pack(side="left")
+            self.others.append((g, t))
+        grid = tk.Frame(right)
+        grid.pack()
+        for n, cell in enumerate(PAD_CELLS):
+            r, c = divmod(n, 3)
+            if cell is None:
+                b = tk.Button(grid, width=2, command=app.toggle_sides, font=("TkDefaultFont", 11, "bold"))
+                self.lock_btn = b
+                Tooltip(b, "Corner moves (a red dot): only the corner you move. Sides move (a blue square): the corner takes the two corners beside it along, like resizing a rectangle by its corner. The L key does the same.")
+            else:
+                glyph, dx, dy = cell
+                b = tk.Button(grid, text=glyph, width=2)
+                b.bind("<ButtonPress-1>", lambda e, dx=dx, dy=dy: self.pad_press(e, dx, dy))
+                b.bind("<ButtonRelease-1>", lambda e: self.pad_stop())
+                b.bind("<Leave>", lambda e: self.pad_stop())
+                self.pad_buttons.append(b)
+            b.grid(row=r, column=c, padx=1, pady=1)
+        self.default_bg = self.lock_btn.cget("bg")
+        self.step_label = tk.Label(right, anchor="w")
+        self.step_label.pack(fill="x")
+        self.mode_label = tk.Label(right, anchor="w")
+        self.mode_label.pack(fill="x")
+        if expanded:
+            tk.Label(holder, anchor="w", justify="left", wraplength=240,
+                     text="Click the picture to place the corner.  The mouse wheel zooms.  Esc closes.").pack(fill="x", pady=(10, 0))
         self.canvas.bind("<Button-1>", self.on_click)
         self.canvas.bind("<MouseWheel>", lambda e: self.zoom_by(1.25 if e.delta > 0 else 0.8))
         self.canvas.bind("<Button-4>", lambda e: self.zoom_by(1.25))
         self.canvas.bind("<Button-5>", lambda e: self.zoom_by(0.8))
-        self.set_vars()
-        self.place(in_=app.canvas, x=0, y=0, relwidth=1, relheight=1)
+        self.canvas.bind("<Configure>", lambda e: self.render())
+        if expanded:
+            self.place(in_=app.canvas, x=0, y=0, relwidth=1, relheight=1)
+        self.set_corner(idx)
+
+    def destroy(self):
+        self.pad_stop()
+        super().destroy()
+
+    def close(self):
+        if self.expanded:
+            self.app.close_panel()
+        else:
+            self.app.deselect()
 
     def point(self):
         return self.app.corners[self.idx]
 
+    def set_corner(self, idx):
+        self.idx = idx
+        self.refresh_mode()
+        self.set_vars()
+        self.render()
+
+    def refresh_mode(self):
+        """The sides-move button, its caption and the little glyphs beside the other corners."""
+        sides = self.app.sides_move
+        self.lock_btn.config(text="\u25A0" if sides else "\u25CF", fg=SIDES_COLOR if sides else CORNER_COLOR)
+        self.mode_label.config(text="Sides move" if sides else "Corner moves")
+        self.refresh_step()
+        self.update_others()
+        self.render()
+
+    def refresh_step(self):
+        step = self.app.step_for(None)
+        self.step_label.config(text="Step: %d" % step)
+        for b in self.pad_buttons:
+            b.config(bg=STEP_TINTS.get(step, self.default_bg))
+
+    def update_others(self):
+        sides = self.app.sides_move
+        anchor = (self.idx + 2) % 4
+        for (g, t), i in zip(self.others, [i for i in KEY_ORDER if i != self.idx]):
+            p = self.app.corners[i]
+            t.config(text="%s %d, %d" % (CORNER_NAMES[i], round(p[0]), round(p[1])))
+            if sides and i != anchor:
+                g.config(text="\u25A0", fg=SIDES_COLOR)
+            else:
+                g.config(text="\u25CF", fg=CORNER_COLOR)
+
     def set_vars(self):
         self.updating = True
-        self.xvar.set("%d" % round(self.point()[0]))
-        self.yvar.set("%d" % round(self.point()[1]))
+        p = self.point()
+        self.xvar.set("%d" % round(p[0]))
+        self.yvar.set("%d" % round(p[1]))
         self.zvar.set("%d" % round(self.zoom * 100))
         self.updating = False
+        self.title_label.config(text="%s corner" % CORNER_LONG[self.idx])
+        self.update_others()
+
+    def refresh(self):
+        self.set_vars()
+        self.render()
+
+    def refresh_light(self):
+        """Used while one of the X and Y boxes is being typed in, so they are not rewritten under the cursor."""
+        self.update_others()
+        self.render()
 
     def on_spin(self):
         if self.updating:
@@ -753,11 +879,11 @@ class CornerEditor(tk.Frame):
             x, y = int(round(float(self.xvar.get()))), int(round(float(self.yvar.get())))
         except ValueError:
             return
-        if [x, y] != [round(v) for v in self.point()]:
-            self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
-        self.app.corners[self.idx] = [x, y]
-        self.app.after_edit()
-        self.render()
+        p = self.point()
+        if [x, y] != [round(p[0]), round(p[1])]:
+            self.app.corner_undo(self.idx)
+            self.app.place_corner(self.idx, x, y)
+            self.app.after_edit(skip=self)
 
     def on_zoom_spin(self):
         if self.updating:
@@ -770,14 +896,36 @@ class CornerEditor(tk.Frame):
         self.set_vars()
         self.render()
 
-    def on_click(self, e):
+    def view_size(self):
         cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
+        return (cw, ch) if cw >= 20 and ch >= 20 else (self.VIEW_W, self.VIEW_H)
+
+    def on_click(self, e):
+        cw, ch = self.view_size()
         x, y = self.point()
-        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
-        self.app.corners[self.idx] = [round(x + (e.x - cw / 2) / self.zoom), round(y + (e.y - ch / 2) / self.zoom)]
-        self.set_vars()
+        self.app.corner_undo(self.idx)
+        self.app.place_corner(self.idx, round(x + (e.x - cw / 2) / self.zoom), round(y + (e.y - ch / 2) / self.zoom))
         self.app.after_edit()
-        self.render()
+
+    def pad_press(self, e, dx, dy):
+        self.pad_stop()
+        self.pad_fire(dx, dy, e.state)
+        self.pad_job = self.after(400, lambda: self.pad_repeat(dx, dy))
+
+    def pad_repeat(self, dx, dy):
+        self.pad_fire(dx, dy, None)
+        self.pad_job = self.after(60, lambda: self.pad_repeat(dx, dy))
+
+    def pad_stop(self):
+        if self.pad_job is not None:
+            self.after_cancel(self.pad_job)
+            self.pad_job = None
+
+    def pad_fire(self, dx, dy, state):
+        step = self.app.step_for(state)
+        self.app.corner_undo(self.idx)
+        self.app.move_corner(self.idx, dx * step, dy * step)
+        self.app.after_edit()
 
     def zoom_by(self, f):
         self.zoom = min(ZOOM_MAX, max(ZOOM_MIN, self.zoom * f))
@@ -785,16 +933,18 @@ class CornerEditor(tk.Frame):
         self.render()
 
     def render(self):
-        cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
-        if cw < 20 or ch < 20:
-            return
+        cw, ch = self.view_size()
         self.photo = render_corner_view(self.app.img, self.point(), self.zoom, cw, ch)
         c = self.canvas
         c.delete("all")
         c.create_image(0, 0, anchor="nw", image=self.photo)
         c.create_line(0, ch / 2, cw, ch / 2, fill="#ff4040")
         c.create_line(cw / 2, 0, cw / 2, ch, fill="#ff4040")
-        c.create_oval(cw / 2 - 9, ch / 2 - 9, cw / 2 + 9, ch / 2 + 9, fill=CORNER_COLOR, outline="white", width=2)
+        r = 9 if self.expanded else 8
+        if self.app.sides_move:
+            c.create_rectangle(cw / 2 - r, ch / 2 - r, cw / 2 + r, ch / 2 + r, fill=SIDES_COLOR, outline="white", width=2)
+        else:
+            c.create_oval(cw / 2 - r, ch / 2 - r, cw / 2 + r, ch / 2 + r, fill=CORNER_COLOR, outline="white", width=2)
 
 
 def render_corner_view(img, point, zoom, cw, ch):
@@ -853,114 +1003,6 @@ class PreviewPanel(tk.Frame):
                 v.create_line(x0, y0, x1, y1, fill=GRID_COLOR, width=1, tags="grid")
 
 
-class Magnifier(tk.Frame):
-    """Docked zoomed view of the selected corner: crosshair, editable X and Y (whole pixels), zoom, nudge arrows,
-    and an Expand button. It stays up until the corner is deselected."""
-    VIEW_W, VIEW_H = 280, 200
-
-    def __init__(self, app):
-        super().__init__(app.root, bd=2, relief="ridge")
-        self.app, self.idx = app, 0
-        self.zoom = float(app.settings.get("mag_zoom", MAG_ZOOM_DEFAULT))
-        self.updating = False
-        head = tk.Frame(self)
-        head.pack(fill="x", padx=6, pady=(4, 0))
-        self.title_label = tk.Label(head, anchor="w", font=("TkDefaultFont", 10, "bold"))
-        self.title_label.pack(side="left")
-        tk.Button(head, text="Expand", command=lambda: app.open_expanded(self.idx)).pack(side="right")
-        self.canvas = tk.Canvas(self, width=self.VIEW_W, height=self.VIEW_H, bg="black", highlightthickness=0)
-        self.canvas.pack(padx=6, pady=4)
-        self.xvar, self.yvar, self.zvar = tk.StringVar(), tk.StringVar(), tk.StringVar()
-        row1 = tk.Frame(self)
-        row1.pack(fill="x", padx=6)
-        self.spin(row1, "X", self.xvar, -100000, 100000, 1, self.on_spin)
-        self.spin(row1, "Y", self.yvar, -100000, 100000, 1, self.on_spin)
-        row2 = tk.Frame(self)
-        row2.pack(fill="x", padx=6, pady=(4, 6))
-        self.spin(row2, "Zoom %", self.zvar, int(ZOOM_MIN * 100), int(ZOOM_MAX * 100), 25, self.on_zoom_spin)
-        for text, dx, dy in (("\u25C0", -1, 0), ("\u25B6", 1, 0), ("\u25B2", 0, -1), ("\u25BC", 0, 1)):
-            tk.Button(row2, text=text, width=2, command=lambda dx=dx, dy=dy: self.nudge(dx, dy)).pack(side="left", padx=1)
-        self.canvas.bind("<Button-1>", self.on_click)
-        self.canvas.bind("<MouseWheel>", lambda e: self.zoom_by(1.25 if e.delta > 0 else 0.8))
-        self.canvas.bind("<Button-4>", lambda e: self.zoom_by(1.25))
-        self.canvas.bind("<Button-5>", lambda e: self.zoom_by(0.8))
-
-    def spin(self, parent, label, var, lo, hi, step, cmd):
-        tk.Label(parent, text=label).pack(side="left", padx=(0, 2))
-        sb = tk.Spinbox(parent, from_=lo, to=hi, increment=step, width=6, textvariable=var, format="%.0f", command=cmd)
-        sb.pack(side="left", padx=(0, 8))
-        sb.bind("<Return>", lambda e: cmd())
-        sb.bind("<FocusOut>", lambda e: cmd())
-        return sb
-
-    def set_corner(self, idx):
-        self.idx = idx
-        self.title_label.config(text="Corner %s" % CORNER_NAMES[idx])
-        self.set_vars()
-        self.render()
-
-    def point(self):
-        return self.app.corners[self.idx]
-
-    def set_vars(self):
-        self.updating = True
-        self.xvar.set("%d" % round(self.point()[0]))
-        self.yvar.set("%d" % round(self.point()[1]))
-        self.zvar.set("%d" % round(self.zoom * 100))
-        self.updating = False
-
-    def on_spin(self):
-        if self.updating:
-            return
-        try:
-            x, y = int(round(float(self.xvar.get()))), int(round(float(self.yvar.get())))
-        except ValueError:
-            return
-        if [x, y] != [round(v) for v in self.point()]:
-            self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
-        self.app.corners[self.idx] = [x, y]
-        self.app.after_edit(skip_magnifier=True)
-        self.render()
-
-    def on_zoom_spin(self):
-        if self.updating:
-            return
-        try:
-            z = float(self.zvar.get()) / 100.0
-        except ValueError:
-            return
-        self.zoom = min(ZOOM_MAX, max(ZOOM_MIN, z))
-        self.set_vars()
-        self.render()
-
-    def nudge(self, dx, dy):
-        p = self.point()
-        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
-        self.app.corners[self.idx] = [p[0] + dx, p[1] + dy]
-        self.app.after_edit()
-
-    def on_click(self, e):
-        x, y = self.point()
-        self.app.undo_begin(("corner", self.idx), "%s corner" % CORNER_NAMES[self.idx])
-        self.app.corners[self.idx] = [round(x + (e.x - self.VIEW_W / 2) / self.zoom), round(y + (e.y - self.VIEW_H / 2) / self.zoom)]
-        self.app.after_edit()
-
-    def zoom_by(self, f):
-        self.zoom = min(ZOOM_MAX, max(ZOOM_MIN, self.zoom * f))
-        self.set_vars()
-        self.render()
-
-    def render(self):
-        self.photo = render_corner_view(self.app.img, self.point(), self.zoom, self.VIEW_W, self.VIEW_H)
-        c = self.canvas
-        c.delete("all")
-        c.create_image(0, 0, anchor="nw", image=self.photo)
-        c.create_line(0, self.VIEW_H / 2, self.VIEW_W, self.VIEW_H / 2, fill="#ff4040")
-        c.create_line(self.VIEW_W / 2, 0, self.VIEW_W / 2, self.VIEW_H, fill="#ff4040")
-        c.create_oval(self.VIEW_W / 2 - 8, self.VIEW_H / 2 - 8, self.VIEW_W / 2 + 8, self.VIEW_H / 2 + 8,
-                      fill=CORNER_COLOR, outline="white", width=2)
-
-
 # ===== settings, file names, backups and the queue =====
 
 HDS7_NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})[ _T](\d{2}-\d{2}-)(\d{2})(.*)$")
@@ -980,6 +1022,7 @@ SETTINGS_DEFAULTS = {
     "no_subsampling": True,         # keeps color sharp around text
     "mag_zoom": 6.0,
     "show_recents": True,
+    "sides_move": False,            # start each session with sides moving (blue squares) instead of the corner alone (red dots)
     "filmstrip": True,              # the row of thumbnails under the picture
     "thumb_height": 50,             # its thumbnail height in pixels (32 up to half the screen height)
     "help_shown": False,            # the first-run help has been shown (the registry keeps its own copy)
@@ -1389,6 +1432,7 @@ class SettingsPanel(tk.Frame):
         self.zoom = tk.StringVar(value="%d" % round(float(s["mag_zoom"]) * 100))
         self.filmstrip = tk.BooleanVar(value=bool(s.get("filmstrip", True)))
         self.thumb = tk.StringVar(value=str(s.get("thumb_height", 50)))
+        self.sides = tk.BooleanVar(value=bool(s.get("sides_move", False)))
 
         def group(title, var, options):
             f = tk.LabelFrame(body, text=title, padx=10, pady=4)
@@ -1431,6 +1475,7 @@ class SettingsPanel(tk.Frame):
         sb.pack(side="left", padx=6)
         sb.bind("<Return>", lambda e: self.commit())
         sb.bind("<FocusOut>", lambda e: self.commit())
+        tk.Checkbutton(body, text="Sides move at startup (blue squares).  The L key switches it while you work.", variable=self.sides, command=self.commit).pack(anchor="w", pady=(6, 0))
         x_btn = tk.Button(self, text="\u2715", relief="flat", bd=0, padx=8, command=app.close_panel)
         x_btn.place(relx=1.0, x=-6, y=6, anchor="ne")
         Tooltip(x_btn, "Close Settings. Esc does the same.")
@@ -1457,6 +1502,7 @@ class SettingsPanel(tk.Frame):
             s["mag_zoom"] = min(ZOOM_MAX, max(ZOOM_MIN, float(self.zoom.get()) / 100.0))
         except ValueError:
             pass
+        s["sides_move"] = bool(self.sides.get())
         s["filmstrip"] = bool(self.filmstrip.get())
         try:
             lo, hi = thumb_limits(self.app.root)
@@ -1705,6 +1751,13 @@ class App:
         self.bends = {s: (0.5, 0.0) for s in SIDES}
         self.rot = 0
         self.crop = tk.BooleanVar(value=True)
+        self.sides_move = bool(self.settings.get("sides_move", False))       # the L key; session state, started from Settings
+        self.mods = {"shift": False, "ctrl": False}                          # held right now, to tint the pad and pick its step
+        for name, keys in (("shift", ("Shift_L", "Shift_R")), ("ctrl", ("Control_L", "Control_R"))):
+            for key in keys:
+                root.bind("<KeyPress-%s>" % key, lambda e, n=name: self.set_mod(n, True), add="+")
+                root.bind("<KeyRelease-%s>" % key, lambda e, n=name: self.set_mod(n, False), add="+")
+        root.bind("<FocusIn>", lambda e: self.clear_mods() if e.widget is root else None, add="+")
         self.mirror = tk.BooleanVar(value=False)
         self.zoom_var = tk.StringVar(value="100")
         self.auto = tk.BooleanVar(value=bool(self.settings["auto_advance"]))
@@ -1770,7 +1823,7 @@ class App:
             Tooltip(part, "Grid lines for lining things up: 1 is a crosshair, 2 is thirds, 4 is fifths, 9 is tenths. "
                           "Click or press G for the next one, right-click or Shift+G for the previous one.")
         self.update_grid_box()
-        tk.Checkbutton(bar1, text="Crop to lines", variable=self.crop).pack(side="left", padx=(12, 2))
+        tk.Checkbutton(bar1, text="Crop to lines", variable=self.crop, command=self.update_size_label).pack(side="left", padx=(12, 2))
         self.rot_btn = tk.Button(bar1, text="Rotate CCW: 0", width=13, command=self.rotate)
         self.rot_btn.pack(side="left", padx=2)
         tk.Checkbutton(bar1, text="Mirror", variable=self.mirror).pack(side="left", padx=2)
@@ -1891,7 +1944,7 @@ class App:
     def set_title(self):
         n = len(self.paths)
         self.source_label.config(text=" Source File: %s" % shorten_middle(os.path.basename(self.path), 52))
-        self.position_label.config(text="%d of %d" % (self.index + 1, n) if n > 1 else "")
+        self.update_size_label()
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
         self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
         self.prev_btn.config(state="normal" if n > 1 else "disabled")
@@ -2027,7 +2080,7 @@ class App:
             self.mirror.set(mirror)
             self.rot_btn.config(text="Rotate CCW: %d" % self.rot)
         self.after_edit()
-        if isinstance(self.panel, CornerEditor):
+        if isinstance(self.panel, CornerPanel):
             self.panel.set_vars()
             self.panel.render()
         left = len(self.undo_stack)
@@ -2067,6 +2120,7 @@ class App:
         self.canvas.set_scale(p / 100.0)
 
     def redraw_overlay(self):
+        self.update_size_label()
         c = self.canvas
         c.delete("ov")
         self.targets = []
@@ -2086,11 +2140,15 @@ class App:
             x, y = c.to_canvas(bend_dot(self.corners, side, self.bends[side]))
             c.create_oval(x - 7, y - 7, x + 7, y + 7, fill=BEND_COLOR, outline="white", width=2, tags="ov")
             self.targets.append(("bend", side, x, y))
+        anchor = (self.selected + 2) % 4 if (self.sides_move and self.selected is not None) else None
         for i, name in enumerate(CORNER_NAMES):
             x, y = c.to_canvas(self.corners[i])
             if i == self.selected:
                 c.create_oval(x - 13, y - 13, x + 13, y + 13, outline="#00e5ff", width=3, tags="ov")
-            c.create_oval(x - 7, y - 7, x + 7, y + 7, fill=CORNER_COLOR, outline="white", width=2, tags="ov")
+            if self.sides_move and i != anchor:         # blue squares move together, the red dot stays put
+                c.create_rectangle(x - 7, y - 7, x + 7, y + 7, fill=SIDES_COLOR, outline="white", width=2, tags="ov")
+            else:
+                c.create_oval(x - 7, y - 7, x + 7, y + 7, fill=CORNER_COLOR, outline="white", width=2, tags="ov")
             c.create_text(x + 12, y - 12, text=name, fill="white", anchor="sw", font=("TkDefaultFont", 10, "bold"), tags="ov")
             self.targets.append(("corner", i, x, y))
 
@@ -2121,14 +2179,89 @@ class App:
         name, _, count = GRID_MODES[self.grid_mode]
         self.say("Grid: off." if count == 0 else "Grid: %s, %d line%s each way." % (name.lower(), count, "" if count == 1 else "s"))
 
-    def after_edit(self, skip_magnifier=False):
-        """Something changed the corners: redraw, and keep the magnifier in step."""
+    def after_edit(self, skip=None):
+        """Something changed the corners: redraw, and keep the corner panels in step. The panel named in skip is the one being
+        typed in, so only its picture and its list of the other corners are refreshed."""
         self.redraw_overlay()
         if self.selected is not None and self.mag is not None:
-            if not skip_magnifier:
-                self.mag.set_vars()
-                self.mag.render()
+            self.mag.refresh_light() if self.mag is skip else self.mag.refresh()
             self.position_magnifier()
+        if isinstance(self.panel, CornerPanel):
+            self.panel.refresh_light() if self.panel is skip else self.panel.refresh()
+
+    # moving corners: the corner alone, or with its two neighbors (sides move, the L key)
+
+    def corner_label(self, i):
+        return "%s corner%s" % (CORNER_NAMES[i], " and sides" if self.sides_move else "")
+
+    def corner_undo(self, i):
+        self.undo_begin(("corner", i, self.sides_move), self.corner_label(i))
+
+    def move_corner(self, i, dx, dy):
+        """Move corner i by (dx, dy). With sides moving, the corner that shares its left or right side follows the sideways part
+        and the corner that shares its top or bottom side follows the up or down part, so the opposite corner stays put."""
+        c = self.corners
+        c[i] = [c[i][0] + dx, c[i][1] + dy]
+        if self.sides_move:
+            if dx:
+                j = DX_PARTNER[i]
+                c[j] = [c[j][0] + dx, c[j][1]]
+            if dy:
+                j = DY_PARTNER[i]
+                c[j] = [c[j][0], c[j][1] + dy]
+
+    def place_corner(self, i, x, y):
+        self.move_corner(i, x - self.corners[i][0], y - self.corners[i][1])
+
+    def toggle_sides(self):
+        self.sides_move = not self.sides_move
+        self.say("Sides move: a corner takes the two corners beside it along." if self.sides_move
+                 else "Corner moves: only the corner you move.")
+        self.redraw_overlay()
+        for p in (self.mag if self.selected is not None else None, self.panel if isinstance(self.panel, CornerPanel) else None):
+            if p is not None:
+                p.refresh_mode()
+
+    def step_for(self, state):
+        """1, or 10 with Shift and 100 with Ctrl, from a mouse event's state or (None) from the keys held right now."""
+        if state is None:
+            ctrl, shift = self.mods["ctrl"], self.mods["shift"]
+        else:
+            ctrl, shift = bool(state & 0x4), bool(state & 0x1)
+        return 100 if ctrl else 10 if shift else 1
+
+    def set_mod(self, name, down):
+        if self.mods[name] != down:
+            self.mods[name] = down
+            self.refresh_steps()
+
+    def clear_mods(self):
+        if any(self.mods.values()):
+            self.mods = {"shift": False, "ctrl": False}
+            self.refresh_steps()
+
+    def refresh_steps(self):
+        for p in (self.mag if self.selected is not None else None, self.panel if isinstance(self.panel, CornerPanel) else None):
+            if p is not None:
+                p.refresh_step()
+
+    def update_size_label(self):
+        """Under the Source line: the place in the list, the photo's size and the size the result will have."""
+        label, img = getattr(self, "position_label", None), getattr(self, "img", None)
+        if label is None or img is None:
+            return
+        parts = []
+        if len(self.paths) > 1:
+            parts.append("%d of %d" % (self.index + 1, len(self.paths)))
+        parts.append("Started: %dx%d" % (img.shape[1], img.shape[0]))
+        try:
+            _, _, _, _, w, h, _ = canvas_info(img.shape, self.corners, self.crop.get())
+            if self.rot in (90, 270):
+                w, h = h, w
+            parts.append("Saving: %dx%d" % (w, h))
+        except (ValueError, np.linalg.LinAlgError, cv2.error):
+            parts.append("Saving: ?")
+        label.config(text="   ".join(parts))
 
     # selecting a corner and the docked magnifier
 
@@ -2137,8 +2270,10 @@ class App:
             self.undo_key = None                # picking another corner ends the run on the previous one
         self.selected = i
         if self.mag is None:
-            self.mag = Magnifier(self)
+            self.mag = CornerPanel(self)
         self.mag.set_corner(i)
+        if isinstance(self.panel, CornerPanel):
+            self.panel.set_corner(i)
         self.position_magnifier(fresh=True)
         self.redraw_overlay()
 
@@ -2262,6 +2397,8 @@ class App:
         step = 100 if ctrl else 10 if shift else 1
         if k in CORNER_KEYS:
             self.select(CORNER_KEYS[k])
+        elif k in ("l", "L"):
+            self.toggle_sides()
         elif k == "0":
             self.propose_zero()
         elif k == "5":
@@ -2277,9 +2414,8 @@ class App:
             if self.selected is None:
                 self.say("Pick a corner first with the keys 1 to 4, or click one.")
                 return
-            p = self.corners[self.selected]
-            self.undo_begin(("corner", self.selected), "%s corner" % CORNER_NAMES[self.selected])
-            self.corners[self.selected] = [p[0] + dx * step, p[1] + dy * step]
+            self.corner_undo(self.selected)
+            self.move_corner(self.selected, dx * step, dy * step)
             self.after_edit()
 
     def grow_all(self, amount):
@@ -2363,7 +2499,7 @@ class App:
                 return
             self.moved = True
             if self.drag[0] == "corner":        # one undo step per drag, started at its first movement
-                self.undo_begin(None, "%s corner" % CORNER_NAMES[self.drag[1]])
+                self.undo_begin(None, self.corner_label(self.drag[1]))
             elif self.drag[0] == "bend":
                 self.undo_begin(None, "%s bend" % self.drag[1])
             elif self.drag[0] == "line":
@@ -2380,7 +2516,7 @@ class App:
             self.redraw_overlay()
         elif kind == "corner":
             p = self.canvas.to_image(e.x, e.y)
-            self.corners[self.drag[1]] = [round(p[0]), round(p[1])]
+            self.place_corner(self.drag[1], round(p[0]), round(p[1]))
             self.after_edit()
         elif kind == "line":
             _, side, start, c0, c1 = self.drag
@@ -2519,7 +2655,7 @@ class App:
 
     def open_expanded(self, i):
         self.close_panel()
-        self.panel = CornerEditor(self, i)
+        self.panel = CornerPanel(self, i, expanded=True)
 
     def open_settings(self):
         if isinstance(self.panel, SettingsPanel):       # the Settings button is a toggle
@@ -2591,6 +2727,7 @@ class App:
     def rotate(self):
         self.rot = (self.rot + 90) % 360
         self.rot_btn.config(text="Rotate CCW: %d" % self.rot)
+        self.update_size_label()
 
     def busy(self, on):
         self.root.config(cursor="watch" if on else "")
