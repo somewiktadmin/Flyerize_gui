@@ -65,7 +65,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.2.0b"
+VERSION = "v0.2.2"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -768,14 +768,16 @@ class CornerPanel(tk.Frame):
             tk.Button(row, text="Expand", command=lambda: app.open_expanded(self.idx)).pack(side="left", padx=2)
         self.others, self.other_idx = [], []
         for n in range(3):
-            r = tk.Frame(left, cursor="hand2")
+            r = tk.Frame(left, bd=1, relief="flat")
             r.pack(fill="x")
-            g = tk.Label(r, width=2, cursor="hand2")
+            g = tk.Label(r, width=2)
             g.pack(side="left")
-            t = tk.Label(r, anchor="w", cursor="hand2")
+            t = tk.Label(r, anchor="w")
             t.pack(side="left")
             for w in (r, g, t):                 # a click on one of the other corners switches to it
                 w.bind("<Button-1>", lambda e, n=n: self.pick_other(n))
+                w.bind("<Enter>", lambda e, r=r: r.after(10, lambda: self.hover_check(r)))
+                w.bind("<Leave>", lambda e, r=r: r.after(10, lambda: self.hover_check(r)))
             Tooltip(t, "Click to work on this corner instead.  The keys 1 to 4 do the same.")
             self.others.append((g, t))
         grid = tk.Frame(right)
@@ -847,6 +849,16 @@ class CornerPanel(tk.Frame):
 
     def pick_other(self, n):
         self.app.select(self.other_idx[n])
+
+    @staticmethod
+    def hover_check(row):
+        """A thin border while the pointer is over one of the clickable corner rows, instead of a hand cursor."""
+        try:
+            w = row.winfo_containing(*row.winfo_pointerxy())
+            inside = w is not None and (w is row or str(w).startswith(str(row) + "."))
+            row.config(relief="groove" if inside else "flat")
+        except (KeyError, tk.TclError):
+            pass
 
     def update_others(self):
         sides = self.app.sides_move
@@ -1476,7 +1488,7 @@ class SettingsPanel(tk.Frame):
         sb.bind("<Return>", lambda e: self.commit())
         sb.bind("<FocusOut>", lambda e: self.commit())
         lo, hi = thumb_limits(app.root)
-        tk.Checkbutton(row, text="Thumbnail row", variable=self.filmstrip, command=self.commit).pack(side="left", padx=(24, 0))
+        tk.Checkbutton(row, text="Thumbnail row (2 or more photos)", variable=self.filmstrip, command=self.commit).pack(side="left", padx=(24, 0))
         tk.Label(row, text="Thumbnail height").pack(side="left", padx=(8, 0))
         sb = tk.Spinbox(row, from_=lo, to=hi, increment=10, width=5, textvariable=self.thumb, command=self.commit)
         sb.pack(side="left", padx=6)
@@ -1938,9 +1950,22 @@ class App:
 
     # one photo at a time
 
+    def film_wanted(self):
+        """The thumbnail row is on in Settings and at least two original photos are open.  Results made by Save New do not
+        count, so a single photo does not get a row after its first save."""
+        if not self.settings.get("filmstrip", True):
+            return False
+        originals = 0
+        for i in range(len(self.paths)):
+            if not self.is_result(i):
+                originals += 1
+                if originals > 1:
+                    return True
+        return False
+
     def sync_filmstrip(self):
-        """Show or hide the thumbnail row and apply its height, after a change in Settings."""
-        if self.settings.get("filmstrip", True):
+        """Show or hide the thumbnail row and apply its height, after a change in Settings or in the list."""
+        if self.film_wanted():
             self.film.set_height(self.settings.get("thumb_height", 50))
             if not self.film.winfo_manager():
                 self.film.pack(fill="x", padx=8, pady=(0, 6), after=self.bar3)
@@ -1958,7 +1983,7 @@ class App:
         self.go_btn.config(state="normal" if n > 1 else "disabled")
         self.auto_chk.config(state="normal" if n > 1 else "disabled")
         self.update_auto_look()
-        self.film.refresh()
+        self.sync_filmstrip()
 
     def load(self, index):
         self.index, self.path = index, self.paths[index]

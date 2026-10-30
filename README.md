@@ -1,4 +1,4 @@
-# Flyerize_gui v0.2.0 2026-10-29
+# Flyerize_gui v0.2.2 2026-10-29
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -6,6 +6,8 @@ Windows tool to fix the perspective and curl in photos of flyers and banners: se
 Somewhere in your photos there is a flyer pinned to a corkboard, a banner sagging along a fence, a sheet of paper taped a little crooked to a door.  You stood off to one side, the camera leaned, and the wind had its say about the corners.  Flyerize_gui takes that photo and hands back what you were really looking at: a flat, upright, readable rectangle.
 
 It starts by guessing where the edges are.  You nudge four corners until they sit just right, bend any side that curves the way the paper hangs, glance at a preview, and save.  One photo at a time, or a whole folder of them, at whatever pace suits you.
+
+This page covers installing and starting it, the quick start and the save buttons.  [USAGE.md](USAGE.md) has the rest: the corner panel, undo, moving through a folder, and every shortcut and setting.
 
 ## What you need
 
@@ -45,10 +47,16 @@ From then on, right-click any photo or folder, choose Send to, then Flyerize_gui
 
 `Flyerize_gui.bat` starts the script with `pythonw`, so no black console window stays open.  It finds the script through its own folder, so it works wherever you put the Flyerize_gui folder.  Make a shortcut to the batch file, as in the steps above, and do not copy the batch file itself into the Send To folder, because a copy would look for the script in the wrong place.  One catch: `pythonw` hides error messages, so if Flyerize_gui ever fails to start without a word, open a command prompt in its folder and run `python Flyerize_gui.py` to see what went wrong.
 
+### Photos from a PDF
+
+`pdf2jpg.bat` and `pdf2jpg.py`, in this repository, turn each page of a PDF into a JPEG beside it, ready for Flyerize_gui.  They are separate from Flyerize_gui on purpose, so a PDF that hangs or crashes cannot take Flyerize_gui down with it.  Install what the helper needs once: `pip install pdf2image`, and Poppler, which `pdf2image` calls to read the PDF.  On Windows, Poppler is a separate download whose `bin` folder must be on your PATH.  On Linux it is `sudo apt install poppler-utils`.  Make a shortcut to `pdf2jpg.bat` in the Send To folder, the same way as above, then right-click a PDF and send it.
+
+A PDF of up to 9 pages is rendered at 600 DPI and a longer one at 300 DPI, one page at a time.  A single page is saved as `name.jpg` and several as `name_p1.jpg`, `name_p2.jpg` and so on, with the numbers padded to the same width.  A PDF that already has its `.jpg` files is skipped.  Delete them to convert it again, and also after a failure partway through a document.  The window stays open only when something was skipped or went wrong.
+
 ## Quick start
 
 1. **Open a photo.**  It fits the window with four red corner dots and yellow lines along the edges.  That is the program's first guess.
-2. **Fix the corners.**  Click a corner and drag it.  The corner panel opens with a zoomed view so you can place it precisely (see the next section).  Or press 1, 2, 3 or 4 to pick a corner and nudge it with the arrow keys.
+2. **Fix the corners.**  Click a corner and drag it.  The corner panel opens with a zoomed view so you can place it precisely (see [USAGE.md](USAGE.md)).  Or press 1, 2, 3 or 4 to pick a corner and nudge it with the arrow keys.
 3. **Or start with a flourish.**  While the whole photo is in view, drag across empty space to draw a rectangle around the flyer, a Z, or a slash from corner to corner.  The program proposes corners, and you press Apply or Cancel.  Start the stroke away from the red dots and yellow lines, because pressing on one of them grabs it instead of drawing.  If the first guess sits right where you want to begin, press Zero first.
 4. **Bend the sides.**  If the paper curves, drag the purple dot on that side.  Right-click a purple dot to make its side straight again.
 5. **Look at the result.**  Press PREVIEW.  Press it again, or press Esc, to go back.  Press G to lay alignment grid lines over the picture.
@@ -58,28 +66,6 @@ From then on, right-click any photo or folder, choose Send to, then Flyerize_gui
 Under the picture, the line with the place in the list also shows `Started: 1440x810`, the size of your photo, and `Saving: 360x270`, the size the result will have.  The result is never scaled, so the second number is simply the area your four corners enclose (with Crop to lines off, the whole straightened photo), turned if you rotate it.
 
 The first time Flyerize_gui starts, a short Help panel appears.  Press F1 any time to see it again.
-
-## The corner panel
-
-Select a corner and its panel opens over the photo, titled with the corner's name, such as Top left corner.  The picture in it is the photo enlarged around that corner, with the corner at the crosshair.  Click anywhere in it to put the corner there.  Under the picture:
-
-- **X and Y** are the corner's position in pixels.  Type a number, or use the little arrows.
-- **Zoom** sets the enlargement, and **Expand** opens a large version of the same panel that takes most of the window.
-- The other three corners are listed with their positions, in the order of the keys 1 to 4.  They are only a display.
-- The **pad of eight arrows** nudges the corner a pixel at a time, the diagonals included.  Hold Shift for 10 and Ctrl for 100, the same as the keys.  The pad's buttons change color while you hold either key, and the step shows under the pad.  Hold a button down to keep going.
-- The ✕ at the top right closes the panel, and so does Esc.
-
-**Corner moves or sides move.**  The button in the middle of the pad, and the L key, switch between two ways to move a corner:
-
-- **Corner moves** (red dots, the default): only the corner you move changes.
-- **Sides move** (blue squares): the corner takes the two corners next to it along, the way you resize a rectangle by dragging one corner.  Move the top left corner down and to the right, and the top right corner follows the downward part, the bottom left corner follows the sideways part, and the bottom right corner stays where it is.  It stays a red dot, and the others are blue squares.
-
-It applies to every way of moving a corner: dragging it, clicking in the panel, the X and Y boxes, the pad, and the arrow keys and W A S D.  Press L even with no corner selected, and you will see all four dots turn into squares.  The mode stays until you press L again, also from one photo to the next.  Settings chooses which way Flyerize_gui starts: rectangles all day, or freeform shapes and oval logos.
-
-## Undo
-
-Ctrl+Z undoes your edits to the photo on screen, one step at a time, with no limit.  A step is one drag, or one run of keypresses on the same corner (a pause of a few seconds, picking another corner or clicking away starts a new one), or one press of Zero, 5%, Reset, an applied gesture, a bend straightened, or a recent crop.  Reset also brings back the rotation and mirror it cleared.  The history starts over when you leave the photo or exit.  It covers the corners and sides, not saves and deletes.  If a gesture is waiting for Apply or Cancel, Ctrl+Z cancels it first.
-
 
 ## The save buttons
 
@@ -108,61 +94,14 @@ Overwrite! is the one button that can lose something for good, so here is exactl
 
 When in doubt, use Save New, which keeps both files, or Replace, which keeps the original as a backup.
 
-## Moving through a folder
-
-- **Back** and **Skip to Next** step through the list.  Files you made with Save New join the list right after their photo, so Back can take you to them, while Skip to Next and Auto go straight to the next original.  Back from the first photo wraps around to the last, but finishing a long list does not make you start over.
-- **Move ±nnn** jumps ahead by a number of photos.  A negative number goes back.
-- **Auto** moves to the next photo after each save.  While it is on, the save buttons show an arrow and turn pale green, and the navigation buttons turn gray (they still work).
-- The **thumbnail row** at the bottom shows the photos around the current one, with the current photo framed in cyan and a green bar under each result made by Save New in this session.  Click a thumbnail to go to that photo.  Settings can turn the row off and set its height, and the row is the first thing to give way when the window is short.
-- The **Recent crops** list on the right remembers corner positions you have used.  Click one to apply those corners to the current photo, which is handy for a series shot from the same spot.
-- Leaving a photo with unsaved changes (including a file name you typed but never used) asks first.  Settings has a checkbox to switch that question off.
-
-## Cheat sheet
-
-### Mouse
-
-- Click a corner to select it, and drag to move it.  With sides moving, the neighboring corners move with it.
-- Drag a purple dot to bend a side.  Right-click a purple dot to straighten that side.
-- Drag a yellow side line to move the whole side.
-- Wheel zooms about the pointer.  When zoomed in, drag empty space to pan.
-- With the whole photo in view, drag across empty space to draw a start gesture: a closed rectangle, a Z, or a slash from corner to corner.
-
-### Keyboard
-
-- 1, 2, 3, 4 select the corner at top left, top right, bottom left, bottom right.
-- Arrow keys or W A S D nudge the selected corner 1 pixel.  Hold Shift for 10 and Ctrl for 100.
-- Plus and minus (keypad or main row) move all four sides out or in at once, with the same steps.
-- 0 puts the corners at the photo's border. 5 puts them 5 percent in.  Ctrl-R finds the corners again.  The number pad's digits work like the top row's.
-- L switches between corner moves and sides move.
-- Ctrl+Z undoes the last edit to the corners and sides.
-- Alt+S is Save New, Alt+A is Replace, Alt+D is Overwrite!, Alt+R is Rename, and the Delete key does what Delete does.
-- Alt+B (or Ctrl+B) is Back, Alt+N (or Ctrl+N) is Skip to Next, and Alt+M is Move ±nnn.  Ctrl+Shift+Alt with B or N jumps 100 photos back or ahead.
-- Alt+V shows or hides the preview.
-- Ctrl with W A S D or the arrows is the times 100 step, so those letters are not used with Ctrl.
-- G cycles the grid: off, then 1, 2, 4 or 9 lines each way (a crosshair, thirds, fifths, tenths).  Shift+G goes back.
-- Esc closes the preview, settings or a corner panel, cancels a proposal, or deselects a corner.
-- F1 shows the Help panel.
-
-### The top row
-
-- The **zoom box** and **Fit** control the main view.
-- **Reset** finds the corners again and clears bends, rotation and mirror.  **Zero** and **5%** put the corners at the border or just inside it.
-- **Grid** is the little box that shows how many grid lines are on.  Click it, or press G.
-- **Crop to lines** cuts the result at your four sides.  Off keeps the whole photo, straightened.
-- **Rotate CCW** turns the result in 90 degree steps.  **Mirror** flips it left to right.  These two change only the preview and the saved result, not the main view.
-- **DBG** writes a picture of the original with your lines drawn on it, named with `~dbg`, next to the photo.  If the grid is on, its lines are drawn too.  Pressing it again replaces that file.  It does not save a result.
-
-### Settings
-
-The Settings button opens and closes the panel, and so do the ✕ at its top right and Esc.  Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes, whether it starts with sides moving, and whether the thumbnail row shows and how tall it is (32 pixels up to half the screen height).  A dropdown there also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box, once you have sent one, turns the reminders off.
-
-### Where Flyerize_gui keeps its files
+## Where Flyerize_gui keeps its files
 
 Settings, and a log of what Flyerize_gui has done (`Flyerize_gui.log`), live in `%APPDATA%\Flyerize_gui\`.  The log starts a fresh file at about 1 MB and keeps the previous one as `Flyerize_gui.log.old`.  If your Python came from the Microsoft Store, Windows quietly keeps these in a private copy of that folder, under `%LOCALAPPDATA%\Packages\` in a folder whose name starts with `PythonSoftwareFoundation`, so you will not find them in the usual place.
 
 ## Good to know
 
 - Every control has a tooltip.  Hover for a moment.
+- Every control, shortcut and setting is described in [USAGE.md](USAGE.md).
 - Curious why it behaves a certain way?  The reasoning behind the design is in DESIGN.md.
 - The Exit button sits off on its own at the right, and the window's close button works the same way.
 - This is early software.  It has been used on hundreds of photos by one person.  If something confuses you, breaks, or just feels wrong, please tell me.  That is exactly the feedback I am hoping for.

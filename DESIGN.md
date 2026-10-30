@@ -1,6 +1,6 @@
 # Flyerize_gui design notes
 
-These notes explain why Flyerize_gui behaves the way it does, so the less obvious choices make sense.  For how to use it, see the README.
+These notes explain why Flyerize_gui behaves the way it does, so the less obvious choices make sense.  For how to use it, see the README and USAGE.md.
 
 ## Scope
 
@@ -20,7 +20,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Corners, sides and gestures
 
 - Corners drag like every other handle.  Early testing showed people instinctively try to drag them, and click-only red corners next to draggable purple dots was inconsistent.
-- X and Y stay visible and editable in a corner panel that remains up after a drag.  The docked panel and the large one are the same panel, with the same controls, differing only in the size of the picture.  The panel also lists the other three corners, read-only, and has a pad of eight arrows so a corner can be nudged with the mouse as well as the keys.  Shift and Ctrl change the pad's step (10 and 100) and tint its buttons while held, because a tint alone is easy to miss, so the step is also written under the pad.
+- X and Y stay visible and editable in a corner panel that remains up after a drag.  The docked panel and the large one are the same panel, with the same controls, differing only in the size of the picture.  The panel also lists the other three corners, and a click on one switches to it (the large panel can cover the other corners on the picture).  The rows show a thin border under the pointer, not a hand cursor, because a hand suggests touching a display-only screen, and has a pad of eight arrows so a corner can be nudged with the mouse as well as the keys.  Shift and Ctrl change the pad's step (10 and 100) and tint its buttons while held, because a tint alone is easy to miss, so the step is also written under the pad.
 - **Corner moves or sides move.**  Moving only one corner is right for freeform artwork and oval logos.  Moving a corner together with its two neighbors, as when resizing a rectangle by a corner, is right for the many days that are all rectangles, and it was the preferred mode of the author's earlier Java tool (Scissor).  Both are essential, so both are one key away (L), and the difference is visible: red dots for corner moves, blue squares for sides move, with the opposite corner staying a red dot as the anchor.  The shape carries the meaning and the color only backs it up.  The same glyphs appear on the pad's center button and beside the other corners in the panel.
 - Sides move splits a move into its sideways part and its up-and-down part.  The corner that shares a left or right side follows the sideways part, and the corner that shares a top or bottom side follows the other, so the opposite corner never moves.  The rule is the same for a drag, a click in the panel, the X and Y boxes, the pad and the keys, because a lock that only some controls obey would be a trap.  Shift is not used as a momentary override for it, since Shift already means a bigger step everywhere else.
 - The mode belongs to the session, not to a panel, and it is visible all the time in the handles, so it cannot be forgotten without being noticed.  Settings sets which mode the program starts in, because some days are all rectangles and some are not.
@@ -76,7 +76,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 - A row under the status lines shows the photos around the current one as wide as the window allows, with the current photo framed and the results of Save New marked with a green bar.  Clicking a thumbnail goes to that photo.  Results from earlier sessions cannot be told apart, so they look like originals.
 - Thumbnails are made on a worker thread, nearest the current photo first, with a few beyond each end made ahead of time.  JPEGs are decoded at a fraction of their size, which is what makes it quick.
-- Screen height is scarce, so the row has a Settings checkbox and a height setting (32 pixels up to half the screen height).  Turning it off also stops the thumbnail work.  It is the last widget in the window, so when the window is short it is the first to disappear.
+- Screen height is scarce, so the row has a Settings checkbox and a height setting (32 pixels up to half the screen height).  Turning it off also stops the thumbnail work.  It is shown only when two or more original photos are open.  Results made by Save New do not count, so a single photo does not get a row after its first save.  It is the last widget in the window, so when the window is short it is the first to disappear.
 
 ## Settings panel
 
@@ -108,3 +108,4 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 - Interface translation.  If it ever happens, the plan is to use standard interface terms so existing glossaries can be reused.
 - Entering the output size, or fitting the result to a paper size.  Showing the size is enough.  Placing the picture on a page is probably a different program.
 - Two purple dots per side.  One curve per side has been enough so far, the Bezier math is already unintuitive, and a second dot would add to that.  No flag-wave pattern has needed it yet.  It will be revisited someday.
+-
