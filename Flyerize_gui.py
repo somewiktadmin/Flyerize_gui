@@ -65,7 +65,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.2.0"
+VERSION = "v0.2.0b"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -766,14 +766,17 @@ class CornerPanel(tk.Frame):
         zs.bind("<FocusOut>", lambda e: self.on_zoom_spin())
         if not expanded:
             tk.Button(row, text="Expand", command=lambda: app.open_expanded(self.idx)).pack(side="left", padx=2)
-        self.others = []
-        for _ in range(3):
-            r = tk.Frame(left)
+        self.others, self.other_idx = [], []
+        for n in range(3):
+            r = tk.Frame(left, cursor="hand2")
             r.pack(fill="x")
-            g = tk.Label(r, width=2)
+            g = tk.Label(r, width=2, cursor="hand2")
             g.pack(side="left")
-            t = tk.Label(r, anchor="w")
+            t = tk.Label(r, anchor="w", cursor="hand2")
             t.pack(side="left")
+            for w in (r, g, t):                 # a click on one of the other corners switches to it
+                w.bind("<Button-1>", lambda e, n=n: self.pick_other(n))
+            Tooltip(t, "Click to work on this corner instead.  The keys 1 to 4 do the same.")
             self.others.append((g, t))
         grid = tk.Frame(right)
         grid.pack()
@@ -842,10 +845,14 @@ class CornerPanel(tk.Frame):
         for b in self.pad_buttons:
             b.config(bg=STEP_TINTS.get(step, self.default_bg))
 
+    def pick_other(self, n):
+        self.app.select(self.other_idx[n])
+
     def update_others(self):
         sides = self.app.sides_move
         anchor = (self.idx + 2) % 4
-        for (g, t), i in zip(self.others, [i for i in KEY_ORDER if i != self.idx]):
+        self.other_idx = [i for i in KEY_ORDER if i != self.idx]
+        for (g, t), i in zip(self.others, self.other_idx):
             p = self.app.corners[i]
             t.config(text="%s %d, %d" % (CORNER_NAMES[i], round(p[0]), round(p[1])))
             if sides and i != anchor:
