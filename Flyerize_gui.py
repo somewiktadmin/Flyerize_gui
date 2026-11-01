@@ -54,10 +54,11 @@ SIDES = ("top", "right", "bottom", "left")
 SIDE_ENDS = {"top": (0, 1), "right": (1, 2), "bottom": (3, 2), "left": (0, 3)}   # corner indices, A then B
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
 CORNER_LONG = ("Top left", "Top right", "Bottom right", "Bottom left")
+KEY_NUMBER = (1, 2, 4, 3)               # the key that selects TL, TR, BR and BL
 SIDES_COLOR = "#1e6bff"                 # blue squares: the corner takes its two neighbors with it (sides move)
 DX_PARTNER = (3, 2, 1, 0)               # the corner that shares a left or right side with this one, and follows a sideways move
 DY_PARTNER = (1, 0, 3, 2)               # the corner that shares a top or bottom side with this one, and follows an up or down move
-KEY_ORDER = (0, 1, 3, 2)                # TL TR BL BR, the order of the keys 1 to 4
+PAD_BUTTON = dict(bd=1, highlightthickness=0, padx=1, pady=0)      # the pad is a little smaller than a standard button
 PAD_CELLS = (("\u2196", -1, -1), ("\u2191", 0, -1), ("\u2197", 1, -1),
              ("\u2190", -1, 0), None, ("\u2192", 1, 0),
              ("\u2199", -1, 1), ("\u2193", 0, 1), ("\u2198", 1, 1))
@@ -65,7 +66,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.2.2"
+VERSION = "v0.2.9"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -479,14 +480,20 @@ def save_output(arr, pil_in, src_path, out_path):
 
 # ===== output options, file names, the outline picture, and recognizing a drawn stroke =====
 
+def even(n):
+    """n, or n minus one if it is odd (a size of 1 stays 1)."""
+    return n - n % 2 if n > 1 else n
+
+
 def apply_output_options(arr, rot, mirror):
-    """Rotate counter-clockwise by rot degrees (0, 90, 180 or 270), then optionally mirror left to right."""
+    """Rotate counter-clockwise by rot degrees (0, 90, 180 or 270), then optionally mirror left to right.  Last, an odd
+    width or height loses its last column or row, on the right or at the bottom, so every result has even sizes."""
     out = arr
     if rot:
         out = np.rot90(out, (rot // 90) % 4)
     if mirror:
         out = out[:, ::-1]
-    return np.ascontiguousarray(out)
+    return np.ascontiguousarray(out[:even(out.shape[0]), :even(out.shape[1])])
 
 
 # Deprecated 2026-10-23: nothing calls this. The DBG button builds its own name.
@@ -711,11 +718,12 @@ class CornerPanel(tk.Frame):
     magnified picture takes 75 percent of the window. The same controls sit under or beside the picture: X and Y,
     Zoom, the other three corners, and a pad of eight arrows around the sides-move button. The arrows step 1, with
     Shift 10 and with Ctrl 100, like the keys."""
-    VIEW_W, VIEW_H = 280, 200
+    BIG_FALLBACK = (280, 200)             # the large panel's picture, until it is on screen and can be measured
 
     def __init__(self, app, idx=0, expanded=False):
         super().__init__(app.root, bd=0 if expanded else 2, relief="flat" if expanded else "ridge")
         self.app, self.idx, self.expanded = app, idx, expanded
+        self.view = max(0, corner_view_size(app.settings))     # the docked picture's side in pixels, 0 for no picture
         self.zoom = float(app.settings.get("mag_zoom", MAG_ZOOM_DEFAULT))
         self.updating = False
         self.xvar, self.yvar, self.zvar = tk.StringVar(), tk.StringVar(), tk.StringVar()
@@ -735,72 +743,81 @@ class CornerPanel(tk.Frame):
         head.pack(fill="x", padx=0 if expanded else 6, pady=(0, 6) if expanded else (4, 0))
         self.title_label = tk.Label(head, anchor="w", font=("TkDefaultFont", 12 if expanded else 10, "bold"))
         self.title_label.pack(side="left")
+        self.title_tip = Tooltip(self.title_label, "")
         x_btn = tk.Button(head, text="\u2715", relief="flat", bd=0, padx=6, command=self.close)
         x_btn.pack(side="right")
         Tooltip(x_btn, "Close this panel. Esc does the same.")
         if not expanded:
-            self.canvas = tk.Canvas(self, width=self.VIEW_W, height=self.VIEW_H, bg="black", highlightthickness=0, cursor="crosshair")
-            self.canvas.pack(padx=6, pady=4)
-        else:
-            self.canvas.config(cursor="crosshair")
+            expand = tk.Button(head, text="Expand", command=lambda: app.open_expanded(self.idx))
+            expand.pack(side="right", padx=2)
+            Tooltip(expand, "Opens a large view of this corner.  The mouse wheel over the small picture zooms it too, so you may not need it.")
+        if expanded or self.view > 0:
+            zs = tk.Spinbox(head, from_=int(ZOOM_MIN * 100), to=int(ZOOM_MAX * 100), increment=25, width=4, textvariable=self.zvar, command=self.on_zoom_spin)
+            zs.pack(side="right", padx=4)
+            zs.bind("<Return>", lambda e: (self.on_zoom_spin(), self.app.canvas.focus_set()))
+            zs.bind("<FocusOut>", lambda e: self.on_zoom_spin())
+            zoom_label = tk.Label(head, text="Zoom")
+            zoom_label.pack(side="right")
+            for w in (zs, zoom_label):
+                Tooltip(w, "How far the picture is zoomed.  The mouse wheel over the picture zooms too.")
+        if not expanded:
+            self.canvas = tk.Canvas(self, width=self.view, height=self.view, bg="black", highlightthickness=0)
+            if self.view > 0:                   # with 0 there is no picture, only the numbers
+                self.canvas.pack(padx=6, pady=4)
         controls = tk.Frame(holder)
         controls.pack(fill="x", padx=0 if expanded else 6, pady=(6, 0) if expanded else (0, 6))
         left = tk.Frame(controls)
-        left.pack(side="left", anchor="n")
         right = tk.Frame(controls)
-        right.pack(side="left", anchor="n", padx=(10, 0))
+        if expanded:                            # one column: the numbers, then the pad
+            left.pack()
+            right.pack(pady=(10, 0))
+        else:                                   # two columns: the numbers get three fifths, the pad two fifths
+            controls.columnconfigure(0, weight=3, uniform="half")
+            controls.columnconfigure(1, weight=2, uniform="half")
+            left.grid(row=0, column=0)
+            right.grid(row=0, column=1)
+        row = tk.Frame(left)
+        row.pack(pady=1)
         for label, var in (("X", self.xvar), ("Y", self.yvar)):
-            row = tk.Frame(left)
-            row.pack(fill="x", pady=1)
-            tk.Label(row, text=label, width=2, anchor="w").pack(side="left")
-            sb = tk.Spinbox(row, from_=-100000, to=100000, increment=1, width=7, textvariable=var, command=self.on_spin)
+            tk.Label(row, text=label).pack(side="left", padx=(6, 1) if label == "Y" else (0, 1))
+            sb = tk.Spinbox(row, from_=-100000, to=100000, increment=1, width=5, textvariable=var, command=self.on_spin)
             sb.pack(side="left")
             sb.bind("<Return>", lambda e: (self.on_spin(), self.app.canvas.focus_set()))     # the keys work again, so does L
             sb.bind("<FocusOut>", lambda e: self.on_spin())
-        row = tk.Frame(left)
-        row.pack(fill="x", pady=1)
-        tk.Label(row, text="Zoom").pack(side="left")
-        zs = tk.Spinbox(row, from_=int(ZOOM_MIN * 100), to=int(ZOOM_MAX * 100), increment=25, width=5, textvariable=self.zvar, command=self.on_zoom_spin)
-        zs.pack(side="left", padx=4)
-        zs.bind("<Return>", lambda e: (self.on_zoom_spin(), self.app.canvas.focus_set()))
-        zs.bind("<FocusOut>", lambda e: self.on_zoom_spin())
-        if not expanded:
-            tk.Button(row, text="Expand", command=lambda: app.open_expanded(self.idx)).pack(side="left", padx=2)
-        self.others, self.other_idx = [], []
-        for n in range(3):
-            r = tk.Frame(left, bd=1, relief="flat")
-            r.pack(fill="x")
-            g = tk.Label(r, width=2)
-            g.pack(side="left")
-            t = tk.Label(r, anchor="w")
-            t.pack(side="left")
-            for w in (r, g, t):                 # a click on one of the other corners switches to it
-                w.bind("<Button-1>", lambda e, n=n: self.pick_other(n))
-                w.bind("<Enter>", lambda e, r=r: r.after(10, lambda: self.hover_check(r)))
-                w.bind("<Leave>", lambda e, r=r: r.after(10, lambda: self.hover_check(r)))
-            Tooltip(t, "Click to work on this corner instead.  The keys 1 to 4 do the same.")
-            self.others.append((g, t))
         grid = tk.Frame(right)
         grid.pack()
         for n, cell in enumerate(PAD_CELLS):
             r, c = divmod(n, 3)
             if cell is None:
-                b = tk.Button(grid, width=2, command=app.toggle_sides, font=("TkDefaultFont", 11, "bold"))
+                b = tk.Button(grid, width=2, command=app.toggle_sides, font=("TkDefaultFont", 10, "bold"), **PAD_BUTTON)
                 self.lock_btn = b
-                Tooltip(b, "Corner moves (a red dot): only the corner you move. Sides move (a blue square): the corner takes the two corners beside it along, like resizing a rectangle by its corner. The L key does the same.")
+                Tooltip(b, "Corner moves (a red dot): only the corner you move.  Sides move (a blue square): the corner takes the two corners beside it along, like resizing a rectangle by its corner.  The L key does the same.")
             else:
                 glyph, dx, dy = cell
-                b = tk.Button(grid, text=glyph, width=2)
+                b = tk.Button(grid, text=glyph, width=2, **PAD_BUTTON)
                 b.bind("<ButtonPress-1>", lambda e, dx=dx, dy=dy: self.pad_press(e, dx, dy))
                 b.bind("<ButtonRelease-1>", lambda e: self.pad_stop())
                 b.bind("<Leave>", lambda e: self.pad_stop())
+                Tooltip(b, "Nudge the corner 1 pixel.  Shift makes it 10 and Ctrl 100.  Hold the button to keep going.")
                 self.pad_buttons.append(b)
             b.grid(row=r, column=c, padx=1, pady=1)
         self.default_bg = self.lock_btn.cget("bg")
-        self.step_label = tk.Label(right, anchor="w")
-        self.step_label.pack(fill="x")
-        self.mode_label = tk.Label(right, anchor="w")
-        self.mode_label.pack(fill="x")
+        self.cells = []
+        box = tk.Frame(left)
+        box.pack(pady=(4, 0))
+        for i, (gr, gc) in enumerate(((0, 0), (0, 1), (1, 1), (1, 0))):     # TL TR BR BL, placed like the corners of the photo
+            r = tk.Frame(box, bd=1, relief="flat")
+            r.grid(row=gr, column=gc, padx=3)
+            g = tk.Label(r, width=1, font=("TkDefaultFont", 8))
+            g.pack(side="left")
+            t = tk.Label(r, font=("TkDefaultFont", 8))
+            t.pack(side="left")
+            for w in (r, g, t):                 # a click on a corner switches to it
+                w.bind("<Button-1>", lambda e, i=i: self.pick(i))
+                w.bind("<Enter>", lambda e, i=i: self.after(10, lambda: self.hover_check(i)))
+                w.bind("<Leave>", lambda e, i=i: self.after(10, lambda: self.hover_check(i)))
+            Tooltip(t, "%s corner.  Click to work on it.  The keys 1 to 4 do the same." % CORNER_LONG[i])
+            self.cells.append((r, g, t))
         if expanded:
             tk.Label(holder, anchor="w", justify="left", wraplength=240,
                      text="Click the picture to place the corner.  The mouse wheel zooms.  Esc closes.").pack(fill="x", pady=(10, 0))
@@ -836,41 +853,41 @@ class CornerPanel(tk.Frame):
         """The sides-move button, its caption and the little glyphs beside the other corners."""
         sides = self.app.sides_move
         self.lock_btn.config(text="\u25A0" if sides else "\u25CF", fg=SIDES_COLOR if sides else CORNER_COLOR)
-        self.mode_label.config(text="Sides move" if sides else "Corner moves")
         self.refresh_step()
         self.update_others()
         self.render()
 
     def refresh_step(self):
         step = self.app.step_for(None)
-        self.step_label.config(text="Step: %d" % step)
         for b in self.pad_buttons:
             b.config(bg=STEP_TINTS.get(step, self.default_bg))
 
-    def pick_other(self, n):
-        self.app.select(self.other_idx[n])
+    def pick(self, i):
+        if i != self.idx:
+            self.app.select(i)
 
-    @staticmethod
-    def hover_check(row):
-        """A thin border while the pointer is over one of the clickable corner rows, instead of a hand cursor."""
+    def hover_check(self, i):
+        """A thin border under the pointer instead of a hand cursor, and a solid one around the selected corner."""
+        r = self.cells[i][0]
         try:
-            w = row.winfo_containing(*row.winfo_pointerxy())
-            inside = w is not None and (w is row or str(w).startswith(str(row) + "."))
-            row.config(relief="groove" if inside else "flat")
+            w = r.winfo_containing(*r.winfo_pointerxy())
+            inside = w is not None and (w is r or str(w).startswith(str(r) + "."))
         except (KeyError, tk.TclError):
-            pass
+            return
+        r.config(relief="solid" if i == self.idx else "groove" if inside else "flat")
 
     def update_others(self):
+        """The four corners with their positions, the dot or square each has on the photo, and a border on the selected one."""
         sides = self.app.sides_move
         anchor = (self.idx + 2) % 4
-        self.other_idx = [i for i in KEY_ORDER if i != self.idx]
-        for (g, t), i in zip(self.others, self.other_idx):
+        for i, (r, g, t) in enumerate(self.cells):
             p = self.app.corners[i]
-            t.config(text="%s %d, %d" % (CORNER_NAMES[i], round(p[0]), round(p[1])))
+            t.config(text="%d,%d" % (round(p[0]), round(p[1])))
             if sides and i != anchor:
                 g.config(text="\u25A0", fg=SIDES_COLOR)
             else:
                 g.config(text="\u25CF", fg=CORNER_COLOR)
+            r.config(relief="solid" if i == self.idx else "flat")
 
     def set_vars(self):
         self.updating = True
@@ -879,7 +896,8 @@ class CornerPanel(tk.Frame):
         self.yvar.set("%d" % round(p[1]))
         self.zvar.set("%d" % round(self.zoom * 100))
         self.updating = False
-        self.title_label.config(text="%s corner" % CORNER_LONG[self.idx])
+        self.title_label.config(text="%s %d" % (CORNER_NAMES[self.idx], KEY_NUMBER[self.idx]))
+        self.title_tip.text = "%s corner.  The key %d selects it, and the same key lets go of it." % (CORNER_LONG[self.idx], KEY_NUMBER[self.idx])
         self.update_others()
 
     def refresh(self):
@@ -916,8 +934,10 @@ class CornerPanel(tk.Frame):
         self.render()
 
     def view_size(self):
+        if not self.expanded:
+            return self.view, self.view
         cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
-        return (cw, ch) if cw >= 20 and ch >= 20 else (self.VIEW_W, self.VIEW_H)
+        return (cw, ch) if cw >= 20 and ch >= 20 else self.BIG_FALLBACK
 
     def on_click(self, e):
         cw, ch = self.view_size()
@@ -952,6 +972,8 @@ class CornerPanel(tk.Frame):
         self.render()
 
     def render(self):
+        if not self.expanded and self.view == 0:
+            return
         cw, ch = self.view_size()
         self.photo = render_corner_view(self.app.img, self.point(), self.zoom, cw, ch)
         c = self.canvas
@@ -1035,7 +1057,10 @@ SETTINGS_DEFAULTS = {
     "naming_mode": "standard",      # standard (name~1) or hds7 (the seconds count up)
     "auto_advance": False,          # in full directory mode, move on to the next photo after each save
     "confirm_overwrite": True,      # ask before Overwrite!, which has no backup and no undo
-    "confirm_actions": True,        # ask before applying a gesture, Reset, Zero or 5%, and before leaving a photo with unsaved changes
+    "confirm_gestures": True,       # ask before applying a gesture, Reset, Zero or 5%
+    "confirm_unsaved": True,        # ask before leaving a photo with unsaved changes
+    "overwrite_button": False,      # show the Overwrite! button (Alt+D); until then it is not there at all
+    "corner_view": 100,             # the corner panel's picture: its side in pixels, 0 for numbers only, -1 for no panel
     "jpeg_quality": 95,
     "fill_mode": "reflect",         # reflect, replicate or black: what fills a corner that lies outside the photo
     "no_subsampling": True,         # keeps color sharp around text
@@ -1068,6 +1093,10 @@ def load_settings():
         for k in SETTINGS_DEFAULTS:
             if k in data:
                 s[k] = data[k]
+        if "confirm_actions" in data:                   # one box became two: each starts from the old answer
+            for k in ("confirm_gestures", "confirm_unsaved"):
+                if k not in data:
+                    s[k] = bool(data["confirm_actions"])
     except (OSError, ValueError):
         pass
     s["recents"] = list(s["recents"])[:RECENTS_MAX]
@@ -1422,7 +1451,8 @@ def shorten_middle(text, n):
 # ===== settings panel and recent crops =====
 
 class SettingsPanel(tk.Frame):
-    """Settings, over the main view. Changes apply and are saved at once."""
+    """Settings, over the main view, on three pages.  Changes apply and are saved at once."""
+    PAGES = ("Saving and safety", "Picture and screen", "Intergalactic travel")
 
     def __init__(self, app):
         super().__init__(app.root)
@@ -1435,26 +1465,48 @@ class SettingsPanel(tk.Frame):
         head.pack(anchor="w", pady=(0, 6))
         tk.Label(head, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(side="left")
         tk.Label(head, text="Here, let me give you enough rope...", font=("TkDefaultFont", 10, "italic")).pack(side="left", padx=(14, 0), anchor="s")
-        tk.Label(body, text="Overwrite! replaces the original with no backup and no undo, and saves space only as far as your crop\n"
-                            "is smaller. Uploaded copies and deleted folders keep the old picture. Turn the question off if you're sure.",
-                 justify="left").pack(anchor="w", pady=(0, 2))
-        self.confirm_overwrite = tk.BooleanVar(value=s["confirm_overwrite"])
-        tk.Checkbutton(body, text="Ask before Overwrite!", variable=self.confirm_overwrite, command=self.commit).pack(anchor="w", pady=(0, 6))
+        self.page = tk.IntVar(value=0)                  # it always opens on the first page
+        tabs = tk.Frame(body)
+        tabs.pack(anchor="w", pady=(0, 6))
+        for n, title in enumerate(self.PAGES):
+            tk.Radiobutton(tabs, text=title, variable=self.page, value=n, indicatoron=False, padx=12, pady=3,
+                           command=self.show_page).pack(side="left", padx=(0, 2))
+        holder = tk.Frame(body)
+        holder.pack(anchor="w")
+        self.pages = []
+        for _ in self.PAGES:                            # stacked in one cell, so the panel keeps one size on every page
+            f = tk.Frame(holder)
+            f.grid(row=0, column=0, sticky="nsew")
+            self.pages.append(f)
         self.undo = tk.StringVar(value=s["undo_method"])
         self.naming = tk.StringVar(value=s["naming_mode"])
-        self.confirm_actions = tk.BooleanVar(value=s["confirm_actions"])
+        self.confirm_gestures = tk.BooleanVar(value=s["confirm_gestures"])
+        self.confirm_unsaved = tk.BooleanVar(value=s["confirm_unsaved"])
+        self.overwrite_button = tk.BooleanVar(value=bool(s.get("overwrite_button", False)))
+        self.confirm_overwrite = tk.BooleanVar(value=s["confirm_overwrite"])
         self.show_recents = tk.BooleanVar(value=s.get("show_recents", True))
         self.coffee_paid = tk.BooleanVar(value=bool(s.get("coffee_paid", False)))
         self.quality = tk.StringVar(value=str(s["jpeg_quality"]))
         self.fill_text = tk.StringVar(value=dict(FILL_CHOICES).get(s.get("fill_mode", "reflect"), FILL_CHOICES[0][1]))
         self.sharp = tk.BooleanVar(value=s["no_subsampling"])
         self.zoom = tk.StringVar(value="%d" % round(float(s["mag_zoom"]) * 100))
+        self.corner_view = tk.StringVar(value=str(corner_view_size(s)))
         self.filmstrip = tk.BooleanVar(value=bool(s.get("filmstrip", True)))
         self.thumb = tk.StringVar(value=str(s.get("thumb_height", 50)))
         self.sides = tk.BooleanVar(value=bool(s.get("sides_move", False)))
 
+        def spin(parent, var, lo, hi, width, increment=1):
+            sb = tk.Spinbox(parent, from_=lo, to=hi, increment=increment, width=width, textvariable=var, command=self.commit)
+            sb.pack(side="left", padx=6)
+            sb.bind("<Return>", lambda e: self.commit())
+            sb.bind("<FocusOut>", lambda e: self.commit())
+            return sb
+
+        # page 1: saving and safety
+        p = self.pages[0]
+
         def group(title, var, options):
-            f = tk.LabelFrame(body, text=title, padx=10, pady=4)
+            f = tk.LabelFrame(p, text=title, padx=10, pady=4)
             f.pack(fill="x", pady=4)
             for value, label in options:
                 tk.Radiobutton(f, text=label, variable=var, value=value, anchor="w", command=self.commit).pack(fill="x")
@@ -1464,41 +1516,53 @@ class SettingsPanel(tk.Frame):
                                                    ("recycle", "Recycle Bin (Windows, local drives)")])
         group("Names of new files", self.naming, [("standard", "name~1, name~2, and so on (up to 99)"),
                                                   ("hds7", "HDS-7 date and time, the seconds count up (up to 99); a name with none gets one in front")])
-        tk.Checkbutton(body, text="Ask before applying a gesture, Reset, Zero or 5%, and before leaving a photo with unsaved changes",
-                       variable=self.confirm_actions, command=self.commit).pack(anchor="w")
-        tk.Checkbutton(body, text="Show the recent crops list on the right", variable=self.show_recents, command=self.commit).pack(anchor="w")
-        tk.Checkbutton(body, text="I have sent a coffee (turns off the coffee nags)", variable=self.coffee_paid, command=self.commit).pack(anchor="w")
-        row = tk.Frame(body)
-        row.pack(anchor="w", pady=(6, 0))
+        tk.Checkbutton(p, text="Ask before applying a gesture, Reset, Zero or 5%", variable=self.confirm_gestures, command=self.commit).pack(anchor="w")
+        tk.Checkbutton(p, text="Ask before leaving a photo with unsaved changes", variable=self.confirm_unsaved, command=self.commit).pack(anchor="w")
+        tk.Label(p, text="Overwrite! replaces the original with no backup and no undo, and saves space only as far as your crop\n"
+                         "is smaller.  Uploaded copies and deleted folders keep the old picture.",
+                 justify="left").pack(anchor="w", pady=(8, 2))
+        tk.Checkbutton(p, text="Show the Overwrite! button (Alt+D)", variable=self.overwrite_button, command=self.commit).pack(anchor="w")
+        tk.Checkbutton(p, text="Ask before Overwrite!", variable=self.confirm_overwrite, command=self.commit).pack(anchor="w")
+
+        # page 2: picture and screen
+        p = self.pages[1]
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(0, 0))
         tk.Label(row, text="JPEG quality").pack(side="left")
-        sb = tk.Spinbox(row, from_=50, to=100, width=5, textvariable=self.quality, command=self.commit)
-        sb.pack(side="left", padx=6)
-        sb.bind("<Return>", lambda e: self.commit())
-        sb.bind("<FocusOut>", lambda e: self.commit())
+        spin(row, self.quality, 50, 100, 5)
         tk.Label(row, text="Empty corner fill").pack(side="left", padx=(24, 0))
         fill_box = ttk.Combobox(row, textvariable=self.fill_text, values=[t for _, t in FILL_CHOICES], state="readonly", width=64)
         fill_box.pack(side="left", padx=6)
         fill_box.bind("<<ComboboxSelected>>", lambda e: self.commit())
-        tk.Checkbutton(body, text="Keep color sharp around text (no chroma subsampling)", variable=self.sharp, command=self.commit).pack(anchor="w")
-        row = tk.Frame(body)
+        tk.Checkbutton(p, text="Keep color sharp around text (no chroma subsampling)", variable=self.sharp, command=self.commit).pack(anchor="w")
+        row = tk.Frame(p)
         row.pack(anchor="w", pady=(6, 0))
-        tk.Label(row, text="Magnifier zoom %").pack(side="left")
-        sb = tk.Spinbox(row, from_=int(ZOOM_MIN * 100), to=int(ZOOM_MAX * 100), increment=25, width=6, textvariable=self.zoom, command=self.commit)
-        sb.pack(side="left", padx=6)
-        sb.bind("<Return>", lambda e: self.commit())
-        sb.bind("<FocusOut>", lambda e: self.commit())
         lo, hi = thumb_limits(app.root)
-        tk.Checkbutton(row, text="Thumbnail row (2 or more photos)", variable=self.filmstrip, command=self.commit).pack(side="left", padx=(24, 0))
+        tk.Label(row, text="Magnifier zoom %").pack(side="left")
+        spin(row, self.zoom, int(ZOOM_MIN * 100), int(ZOOM_MAX * 100), 6, 25)
+        tk.Label(row, text="Corner picture size").pack(side="left", padx=(24, 0))
+        spin(row, self.corner_view, -1, max(100, app.root.winfo_screenheight() // 2), 5)
+        tk.Label(row, text="(0 is numbers only, -1 is no panel)").pack(side="left")
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(6, 0))
+        tk.Checkbutton(row, text="Thumbnail row (2 or more photos)", variable=self.filmstrip, command=self.commit).pack(side="left")
         tk.Label(row, text="Thumbnail height").pack(side="left", padx=(8, 0))
-        sb = tk.Spinbox(row, from_=lo, to=hi, increment=10, width=5, textvariable=self.thumb, command=self.commit)
-        sb.pack(side="left", padx=6)
-        sb.bind("<Return>", lambda e: self.commit())
-        sb.bind("<FocusOut>", lambda e: self.commit())
-        tk.Checkbutton(body, text="Sides move at startup (blue squares).  The L key switches it while you work.", variable=self.sides, command=self.commit).pack(anchor="w", pady=(6, 0))
+        spin(row, self.thumb, lo, hi, 5, 10)
+        tk.Checkbutton(p, text="Show the recent crops list on the right", variable=self.show_recents, command=self.commit).pack(anchor="w", pady=(6, 0))
+        tk.Checkbutton(p, text="Sides move at startup (blue squares).  The L key switches it while you work.", variable=self.sides, command=self.commit).pack(anchor="w")
+        tk.Checkbutton(p, text="I have sent a coffee (turns off the coffee nags)", variable=self.coffee_paid, command=self.commit).pack(anchor="w", pady=(6, 0))
+
+        # page 3: for what is not in Flyerize_gui, yet
+        tk.Label(self.pages[2], text="Nothing here yet.", justify="left").pack(anchor="nw", pady=8)
+
         x_btn = tk.Button(self, text="\u2715", relief="flat", bd=0, padx=8, command=app.close_panel)
         x_btn.place(relx=1.0, x=-6, y=6, anchor="ne")
         Tooltip(x_btn, "Close Settings. Esc does the same.")
+        self.show_page()
         self.place(in_=app.canvas, x=0, y=0, relwidth=1, relheight=1)
+
+    def show_page(self):
+        self.pages[self.page.get()].tkraise()
 
     def fit(self, event=None):
         """Centered when it fits. A panel taller than the window is anchored at the top instead, so the heading is never cut off."""
@@ -1511,7 +1575,9 @@ class SettingsPanel(tk.Frame):
         s = self.app.settings
         s["undo_method"], s["naming_mode"] = self.undo.get(), self.naming.get()
         s["no_subsampling"] = bool(self.sharp.get())
-        s["confirm_actions"] = bool(self.confirm_actions.get())
+        s["confirm_gestures"] = bool(self.confirm_gestures.get())
+        s["confirm_unsaved"] = bool(self.confirm_unsaved.get())
+        s["overwrite_button"] = bool(self.overwrite_button.get())
         s["confirm_overwrite"] = bool(self.confirm_overwrite.get())
         s["show_recents"] = bool(self.show_recents.get())
         s["coffee_paid"] = bool(self.coffee_paid.get())
@@ -1529,9 +1595,18 @@ class SettingsPanel(tk.Frame):
             self.thumb.set(str(s["thumb_height"]))
         except ValueError:
             pass
+        old_view = corner_view_size(s)
+        try:
+            s["corner_view"] = min(max(100, self.app.root.winfo_screenheight() // 2), max(-1, int(float(self.corner_view.get()))))
+            self.corner_view.set(str(s["corner_view"]))
+        except ValueError:
+            pass
         save_settings(s)
         self.app.sync_recents_visibility()
         self.app.sync_filmstrip()
+        self.app.sync_overwrite_button()
+        if corner_view_size(s) != old_view:
+            self.app.reset_corner_panel()
 
 
 # ===== main window =====
@@ -1582,6 +1657,14 @@ class Tooltip:
         if self.tip is not None:
             self.tip.destroy()
             self.tip = None
+
+
+def corner_view_size(settings):
+    """The corner panel's picture: -1 no panel at all, 0 numbers only, otherwise the side of the square in pixels."""
+    try:
+        return int(settings.get("corner_view", 100))
+    except (TypeError, ValueError):
+        return 100
 
 
 def thumb_limits(root):
@@ -1816,6 +1899,8 @@ class App:
         self.canvas = ZoomView(mid, self.img, on_change=self.on_view_change, bg="#202020")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.film = Filmstrip(root, self)
+        self.sides_var = tk.BooleanVar(value=self.sides_move)
+        self.build_menu()
         bar1 = tk.Frame(root)
         bar1.pack(fill="x", padx=8, pady=(6, 0))
         self.preview_btn = tk.Button(bar1, text="PREVIEW", width=9, command=self.on_preview)
@@ -1881,11 +1966,11 @@ class App:
         self.replace_btn = tk.Button(bar2, text="Replace", width=10, command=lambda: self.do_save("replace_undo"))
         self.replace_btn.pack(side="left", padx=2)
         self.overwrite_btn = tk.Button(bar2, text="Overwrite!", width=12, command=lambda: self.do_save("replace_perm"))
-        self.overwrite_btn.pack(side="left", padx=2)
         self.rename_btn = tk.Button(bar2, text="Rename", width=9, command=self.on_rename)
         self.rename_btn.pack(side="left", padx=2)
         self.delete_btn = tk.Button(bar2, text="Delete", width=8, command=self.on_delete)
         self.delete_btn.pack(side="left", padx=2)
+        self.sync_overwrite_button()
         self.btn_bg, self.btn_fg = self.save_btn.cget("bg"), self.save_btn.cget("fg")
         Tooltip(self.save_btn, "Saves the result as a new file and leaves the original alone. If the name is taken, a number is added. Alt+S does the same.")
         Tooltip(self.replace_btn, "Backs up the photo on screen, then saves the result under the name in the box. If that name belongs to a different file, a number is added. Settings says where the backup goes. Alt+A does the same.")
@@ -1949,6 +2034,61 @@ class App:
         self.status.config(text="\n".join(shorten_middle(line, n) for line in text.split("\n")))
 
     # one photo at a time
+
+    def build_menu(self):
+        """File, Edit and Help across the top.  A row of menu buttons, not the window's own menu bar, so Windows never treats
+        Alt with a letter as a menu key and the Alt shortcuts stay as they are."""
+        bar = tk.Frame(self.root)
+        bar.pack(side="top", fill="x", before=self.mid)
+        def add(title):
+            b = tk.Menubutton(bar, text=title, relief="flat", padx=8, pady=1, underline=0)
+            b.pack(side="left")
+            m = tk.Menu(b, tearoff=0)
+            b.config(menu=m)
+            for key in (title[0].lower(), title[0].upper()):            # Alt+F, Alt+E and Alt+H open the menus
+                self.root.bind("<Alt-%s>" % key, lambda e, b=b, m=m: m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height()))
+            return m
+        m = add("File")
+        m.add_command(label="Open photos...", command=self.open_photos)
+        m.add_command(label="Open folder...", command=self.open_folder)
+        m.add_separator()
+        m.add_command(label="Exit", command=self.on_exit)
+        m = add("Edit")
+        m.add_command(label="Undo", accelerator="Ctrl+Z", command=self.undo)
+        m.add_separator()
+        for key, i in (("1", 0), ("2", 1), ("3", 3), ("4", 2)):
+            m.add_command(label="%s corner" % CORNER_LONG[i], accelerator=key, command=lambda i=i: self.select(i))
+        m.add_separator()
+        m.add_checkbutton(label="Sides move", accelerator="L", variable=self.sides_var, command=self.toggle_sides)
+        m = add("Help")
+        m.add_command(label="Help", accelerator="F1", command=self.show_help)
+        m.add_command(label="About Flyerize_gui", command=self.show_about)
+
+    def show_about(self):
+        messagebox.showinfo("About Flyerize_gui", "Flyerize_gui %s\n\nStraightens photos of flyers and banners.\nFree software (GPL-3.0-or-later), no warranty.\nhttps://github.com/somewiktadmin/Flyerize_gui" % VERSION, parent=self.root)
+
+    def add_to_list(self, names):
+        """Add photos or folders to the end of the current list, skipping any already in it.  The photo on screen stays."""
+        added = [p for p in collect_paths(names) if p not in self.paths]
+        if added:
+            self.paths.extend(added)
+            self.set_title()
+            self.say("Added %d file(s) to the list." % len(added))
+        else:
+            self.say("Nothing new: those photos are already in the list.")
+        return added
+
+    def open_photos(self):
+        here = os.path.dirname(self.path) if getattr(self, "path", None) else ""
+        names = filedialog.askopenfilenames(parent=self.root, title="Add photos to the list", filetypes=IMAGE_TYPES, initialdir=here or None)
+        if names:
+            self.add_to_list(list(names))
+
+    def open_folder(self):
+        here = os.path.dirname(self.path) if getattr(self, "path", None) else ""
+        folder = filedialog.askdirectory(parent=self.root, title="Add a folder of photos to the list", initialdir=here or None)
+        if folder:
+            self.add_to_list([folder])
 
     def film_wanted(self):
         """The thumbnail row is on in Settings and at least two original photos are open.  Results made by Save New do not
@@ -2125,13 +2265,9 @@ class App:
             touch_lock()
             lines = read_queue()
             if lines:
-                added = [p for p in collect_paths(lines) if p not in self.paths]
+                added = self.add_to_list(lines)
                 log_note("QUEUE_IN", VERSION, run_kind(), "items=%d" % len(lines), "added=%d" % len(added),
                          "queue=" + os.path.abspath(queue_file()))
-                if added:
-                    self.paths.extend(added)
-                    self.set_title()
-                    self.say("Added %d file(s) to the queue." % len(added))
         except Exception:
             pass
         self.poll_id = self.root.after(QUEUE_POLL_MS, self.poll_queue)
@@ -2247,6 +2383,7 @@ class App:
 
     def toggle_sides(self):
         self.sides_move = not self.sides_move
+        self.sides_var.set(self.sides_move)
         self.say("Sides move: a corner takes the two corners beside it along." if self.sides_move
                  else "Corner moves: only the corner you move.")
         self.redraw_overlay()
@@ -2290,7 +2427,7 @@ class App:
             _, _, _, _, w, h, _ = canvas_info(img.shape, self.corners, self.crop.get())
             if self.rot in (90, 270):
                 w, h = h, w
-            parts.append("Saving: %dx%d" % (w, h))
+            parts.append("Saving: %dx%d" % (even(w), even(h)))
         except (ValueError, np.linalg.LinAlgError, cv2.error):
             parts.append("Saving: ?")
         label.config(text="   ".join(parts))
@@ -2301,13 +2438,23 @@ class App:
         if i != self.selected:
             self.undo_key = None                # picking another corner ends the run on the previous one
         self.selected = i
-        if self.mag is None:
-            self.mag = CornerPanel(self)
-        self.mag.set_corner(i)
+        if corner_view_size(self.settings) >= 0:            # -1 means no panel at all
+            if self.mag is None:
+                self.mag = CornerPanel(self)
+            self.mag.set_corner(i)
+            self.position_magnifier(fresh=True)
         if isinstance(self.panel, CornerPanel):
             self.panel.set_corner(i)
-        self.position_magnifier(fresh=True)
         self.redraw_overlay()
+
+    def reset_corner_panel(self):
+        """The corner picture size was changed in Settings: the next panel is made at the new size."""
+        if self.mag is not None:
+            self.mag.destroy()
+            self.mag = None
+            self.mag_side = None
+        if self.selected is not None:
+            self.select(self.selected)
 
     def deselect(self):
         self.undo_key = None
@@ -2428,7 +2575,12 @@ class App:
         ctrl, shift = bool(e.state & 0x4), bool(e.state & 0x1)
         step = 100 if ctrl else 10 if shift else 1
         if k in CORNER_KEYS:
-            self.select(CORNER_KEYS[k])
+            if self.selected == CORNER_KEYS[k]:     # the key of the selected corner lets go of it, and closes the large panel too
+                self.deselect()
+                if isinstance(self.panel, CornerPanel):
+                    self.close_panel()
+            else:
+                self.select(CORNER_KEYS[k])
         elif k in ("l", "L"):
             self.toggle_sides()
         elif k == "0":
@@ -2613,7 +2765,7 @@ class App:
 
     def propose(self, quad, text, stroke=None, action=None, label=""):
         self.ghost = {"quad": np.array(quad, dtype=np.float64), "stroke": stroke, "action": action, "label": label}
-        if not self.settings["confirm_actions"]:
+        if not self.settings["confirm_gestures"]:
             self.apply_ghost()
             return
         self.show_ghost_bar(text)
@@ -2630,7 +2782,7 @@ class App:
     def propose_reset(self):
         self.say("Finding corners again...")
         self.root.update_idletasks()
-        if not self.settings["confirm_actions"]:
+        if not self.settings["confirm_gestures"]:
             self.reset_current()
             self.after_edit()
             return
@@ -2762,7 +2914,6 @@ class App:
         self.update_size_label()
 
     def busy(self, on):
-        self.root.config(cursor="watch" if on else "")
         self.root.update_idletasks()
 
     def on_preview(self):
@@ -2926,7 +3077,7 @@ class App:
         if self.coffee_img is not None:
             tk.Label(win, text="Scan with your phone:").pack()
             tk.Label(win, image=self.coffee_img, bd=0).pack(pady=4)
-        link = tk.Label(win, text="Click here to open PayPal in your browser", fg="#0645ad", cursor="hand2",
+        link = tk.Label(win, text="Click here to open PayPal in your browser", fg="#0645ad",
                         font=("TkDefaultFont", 10, "underline"))
         link.pack(pady=(0, 8))
         link.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
@@ -2966,8 +3117,6 @@ class App:
         txt.pack(fill="both", expand=True)
         txt.tag_configure("link", foreground="#0645ad", underline=True)
         txt.tag_bind("link", "<Button-1>", lambda e: webbrowser.open(DISCUSSIONS_URL))
-        txt.tag_bind("link", "<Enter>", lambda e: txt.config(cursor="hand2"))
-        txt.tag_bind("link", "<Leave>", lambda e: txt.config(cursor="arrow"))
         for i, para in enumerate(HELP_TEXT):
             pos = para.find(DISCUSSIONS_URL)
             if pos < 0:
@@ -3168,8 +3317,19 @@ class App:
             return self.trace[0]
         return None
 
+    def sync_overwrite_button(self):
+        """Overwrite! is not on the screen at all until Settings turns it on."""
+        if self.settings.get("overwrite_button", False):
+            if not self.overwrite_btn.winfo_manager():
+                self.overwrite_btn.pack(side="left", padx=2, before=self.rename_btn)
+        else:
+            self.overwrite_btn.pack_forget()
+
     def do_save(self, mode):
         """A save button was pressed. With Auto on, a successful save moves on to the next photo."""
+        if mode == "replace_perm" and not self.settings.get("overwrite_button", False):
+            self.say("Overwrite! is off.  Turn it on in Settings, on the Saving and safety page.")
+            return
         originals = sum(1 for j in range(len(self.paths)) if not self.is_result(j))
         was_last = originals > 10 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
         ok = self.on_generate(mode)
@@ -3320,7 +3480,7 @@ class App:
         name_changed = self.new_name.get() != self.name_baseline
         if not corners_changed and not name_changed:
             return True
-        if self.settings["confirm_actions"]:
+        if self.settings["confirm_unsaved"]:
             if corners_changed:
                 answer = messagebox.askyesnocancel("Save changes?",
                                                    "The straightened result has not been saved.\n\nSave it first?")
@@ -3360,18 +3520,17 @@ def main():
         log_note("HANDOFF", VERSION, run_kind(), "items=%d" % len(args), "queue=" + os.path.abspath(queue_file()))
         return
     root = tk.Tk()
-    if not args:
+    paths = collect_paths(args) if args else []
+    if args and not paths:
+        root.withdraw()
+        messagebox.showerror("Not found", "No images found in: %s" % " ".join(args))
+    if not paths:
         root.withdraw()
         path = filedialog.askopenfilename(title="Choose a photo or scan", filetypes=IMAGE_TYPES)
         root.deiconify()
         if not path:
             return
         paths = [path]
-    else:
-        paths = collect_paths(args)
-        if not paths:
-            messagebox.showerror("Not found", "No images found in: %s" % " ".join(args))
-            return
     try:
         App(root, paths)
     except Exception as ex:

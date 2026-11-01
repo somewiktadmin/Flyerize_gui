@@ -2,15 +2,27 @@
 
 The controls, one by one.  For installing and starting Flyerize_gui, the quick start and the save buttons, see the [README](README.md).
 
+## The menus
+
+File, Edit and Help run across the top.  Alt+F, Alt+E and Alt+H open them.
+
+- **File** has Open photos and Open folder, which add to the end of the current list and skip anything already in it.  The photo on screen stays.  When that makes two or more photos, the thumbnail row appears, and it is your way back to where you were.  Exit is there too.
+- **Edit** has Undo (Ctrl+Z), the four corners (the keys 1 to 4), and Sides move (L), which shows a check mark while it is on.
+- **Help** has the Help panel (F1) and About, which shows the version.
+
+They are a row of buttons, not the window's own menu bar, so the Alt shortcuts below are not affected.
+
 ## The corner panel
 
-Select a corner and its panel opens over the photo, titled with the corner's name, such as Top left corner.  The picture in it is the photo enlarged around that corner, with the corner at the crosshair.  Click anywhere in it to put the corner there.  Under the picture:
+Select a corner and its panel opens over the photo, titled with the corner's initials and its key, such as TL 1 for the top left corner.  The picture in it is the photo enlarged around that corner, with the corner at the crosshair.  Click anywhere in it to put the corner there.  Under the picture:
 
 - **X and Y** are the corner's position in pixels.  Type a number, or use the little arrows.
-- **Zoom** sets the enlargement, and **Expand** opens a large version of the same panel that takes most of the window.
-- The other three corners are listed with their positions, in the order of the keys 1 to 4.  Click one to switch to that corner, the same as pressing its key.
-- The **pad of eight arrows** nudges the corner a pixel at a time, the diagonals included.  Hold Shift for 10 and Ctrl for 100, the same as the keys.  The pad's buttons change color while you hold either key, and the step shows under the pad.  Hold a button down to keep going.
-- The ✕ at the top right closes the panel, and so does Esc.
+- **Zoom** and **Expand** sit in the title row.  Zoom sets the enlargement, and Expand opens a large version of the same panel that takes most of the window, with the numbers and the pad in one column beside the picture.
+- The four corners are shown where they belong, top left and top right above, bottom left and bottom right below, each with its position.  The selected one has a border.  Click another to switch to it, the same as pressing its key.  A red dot or a blue square beside each shows how it moves (see below).
+- The **pad of eight arrows** nudges the corner a pixel at a time, the diagonals included.  Hold Shift for 10 and Ctrl for 100, the same as the keys.  The pad's buttons change color while you hold either key.  Hold a button down to keep going.
+- The ✕ at the top right closes the panel, and so does Esc.  The key of the selected corner (1 to 4) lets go of that corner too, and closes the large panel with it.
+
+**The picture's size.**  Settings, on the Picture and screen page, sets how big the picture is: a number of pixels, 100 to begin with.  At 0 the panel is only the numbers, the four corners and the pad, and the mouse wheel on the main view still zooms.  At -1 there is no panel at all, only the dots or squares on the photo, and the mouse and the keys still work.
 
 **Corner moves or sides move.**  The button in the middle of the pad, and the L key, switch between two ways to move a corner:
 
@@ -51,7 +63,7 @@ Ctrl+Z undoes your edits to the photo on screen, one step at a time, with no lim
 - 0 puts the corners at the photo's border. 5 puts them 5 percent in.  Ctrl-R finds the corners again.  The number pad's digits work like the top row's.
 - L switches between corner moves and sides move.
 - Ctrl+Z undoes the last edit to the corners and sides.
-- Alt+S is Save New, Alt+A is Replace, Alt+D is Overwrite!, Alt+R is Rename, and the Delete key does what Delete does.
+- Alt+S is Save New, Alt+A is Replace, Alt+D is Overwrite! (once the button is turned on in Settings), Alt+R is Rename, and the Delete key does what Delete does.
 - Alt+B (or Ctrl+B) is Back, Alt+N (or Ctrl+N) is Skip to Next, and Alt+M is Move ±nnn.  Ctrl+Shift+Alt with B or N jumps 100 photos back or ahead.
 - Alt+V shows or hides the preview.
 - Ctrl with W A S D or the arrows is the times 100 step, so those letters are not used with Ctrl.
@@ -70,4 +82,4 @@ Ctrl+Z undoes your edits to the photo on screen, one step at a time, with no lim
 
 ### Settings
 
-The Settings button opens and closes the panel, and so do the ✕ at its top right and Esc.  Settings is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), JPEG quality, whether the Recent crops list shows, whether Flyerize_gui asks before applying a gesture or leaving a photo with unsaved changes, whether it starts with sides moving, and whether the thumbnail row shows when two or more photos are open and how tall it is (32 pixels up to half the screen height).  A dropdown there also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box, once you have sent one, turns the reminders off.
+The Settings button opens and closes the panel, and so do the ✕ at its top right and Esc.  Settings has three pages, as tabs, and always opens on the first.  Saving and safety is where you choose where backups go, how new files are numbered (`name~1`, or a timestamp whose seconds count up), whether Flyerize_gui asks before applying a gesture, before leaving a photo with unsaved changes and before Overwrite!, and whether the Overwrite! button is on the screen at all.  Picture and screen has JPEG quality, whether the Recent crops list shows, whether it starts with sides moving, the size of the corner picture, and whether the thumbnail row shows when two or more photos are open and how tall it is (32 pixels up to half the screen height).  The third page is empty for now.  A dropdown on the second page also chooses what fills an empty corner when you pull a corner past the photo's edge: mirror the edge (the default), repeat the edge, or black.  There is also a checkbox for the occasional coffee reminder.  If Flyerize_gui has saved you time, a $5 coffee through [PayPal](https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen) is very welcome, and ticking that box, once you have sent one, turns the reminders off.

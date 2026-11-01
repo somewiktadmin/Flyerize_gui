@@ -1,4 +1,4 @@
-# Flyerize_gui v0.2.2 2026-10-29
+# Flyerize_gui v0.2.9 2026-10-29
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -33,7 +33,7 @@ With a photo, it opens that photo.  With a folder, it lines up every image in it
 
 A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
 
-If Flyerize_gui is already open and you start it again with more files, for example from the Send To menu, the new files join the open window's list.
+If Flyerize_gui is already open and you start it again with more files, for example from the Send To menu, the new files join the open window's list.  The File menu does the same: Open photos and Open folder add to the list, and the photo on screen stays.
 
 ### Adding Flyerize_gui to the Send To menu
 
@@ -63,7 +63,7 @@ A PDF of up to 9 pages is rendered at 600 DPI and a longer one at 300 DPI, one p
 6. **Save.**  Press Save New.  The straightened picture is written next to the original, and the original is left alone.
 7. **Move on.**  Press Skip to Next (Alt+N), or turn on Auto and let each save carry you to the next photo.
 
-Under the picture, the line with the place in the list also shows `Started: 1440x810`, the size of your photo, and `Saving: 360x270`, the size the result will have.  The result is never scaled, so the second number is simply the area your four corners enclose (with Crop to lines off, the whole straightened photo), turned if you rotate it.
+Under the picture, the line with the place in the list also shows `Started: 1440x810`, the size of your photo, and `Saving: 360x270`, the size the result will have.  The result is never scaled, so the second number is simply the area your four corners enclose (with Crop to lines off, the whole straightened photo), turned if you rotate it.  Both numbers of a result are always even: an odd last column or row is clipped from the right or the bottom, never duplicated.
 
 The first time Flyerize_gui starts, a short Help panel appears.  Press F1 any time to see it again.
 
@@ -73,7 +73,7 @@ The box labeled New name always shows the name the next save will use, and the S
 
 - **Save New** (Alt+S) writes the result as a new file and leaves the original alone.  If the name is taken, a number is added (`name~1`, `name~2`, and so on).
 - **Replace** (Alt+A) backs up the photo on screen, then writes the result under the name in the box.  If that name belongs to a different file, the result gets a number, as Save New does.
-- **Overwrite!** (Alt+D) does the same with no backup, and asks first.  It cannot be undone, and it saves space only when the crop is small (see the next section).
+- **Overwrite!** (Alt+D) does the same with no backup, and asks first.  The button is not on the screen until you turn it on in Settings.  It cannot be undone, and it saves space only when the crop is small (see the next section).
 - **Rename** (Alt+R) renames the photo's file to the name in the box without rewriting the picture.  The file keeps its own extension.
 - **Delete** (the Delete key) moves the photo aside as a backup and goes to the next one.  Nothing is asked, and nothing is destroyed.  Backups are normally dot-prefixed copies (.trashed_name.jpg) next to the photo, and Settings can send them to a folder or the Recycle Bin instead.
 
@@ -81,7 +81,7 @@ Every file Flyerize_gui writes is a separate file with its own name.  It rarely 
 
 ### About Overwrite!
 
-Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.
+Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.  It is not on the screen until you turn it on, on the Saving and safety page of Settings, and it stays on or off exactly as you leave it.
 
 **What it does.**  It deletes the photo on screen and saves the result under the name in the box.  When the name is the photo's own, the result simply takes its place.  When the original is not a JPEG, the box starts with a `.jpg` name, so Overwrite! deletes the original and leaves the `.jpg`, and that includes a HEIC photo.  If the name belongs to a different file, the result gets a number and that file is left alone.  There is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
  
