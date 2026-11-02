@@ -45,6 +45,17 @@ Ctrl+Z undoes your edits to the photo on screen, one step at a time, with no lim
 - The **Recent crops** list on the right remembers corner positions you have used.  Click one to apply those corners to the current photo, which is handy for a series shot from the same spot.
 - Leaving a photo with unsaved changes (including a file name you typed but never used) asks first.  Settings has a checkbox to switch that question off.
 
+## Getting a file back
+
+Flyerize_gui has no Undelete, because the files are never really gone.  Replace and Delete keep the old file as a backup, in the place chosen under Settings, on the Files and Navigation page.
+
+- **`.trashed_` backups** (the default) sit beside the photo, with `.trashed_` in front of the name.  Rename one back to its own name, without the `.trashed_`, and it is the photo again.  If that name is in use, give it any other name.  If a number was added to the backup's name because an older backup was already there, the highest number is the newest.
+- **The `.originals` folder** is beside the photo too.  Copy or move the file out.
+- **The Recycle Bin** is Windows' own.  Right-click the file there and choose Restore.
+- **Overwrite!** keeps no backup, which is the point of it, so nothing comes back from it.
+
+`Flyerize_gui.log`, in `%APPDATA%\Flyerize_gui\`, lists every save, rename and delete in order.  A `BACKUP` line, just before the line of the action it belongs to, shows which file was backed up and where its backup went, so you can tell which backup is which.
+
 ## Cheat sheet
 
 ### Mouse

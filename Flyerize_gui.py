@@ -66,7 +66,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.3.2"
+VERSION = "v0.3.3"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -1584,11 +1584,6 @@ class SettingsPanel(tk.Frame):
         row.pack(anchor="w", pady=(4, 0))
         tk.Checkbutton(row, text="Shrink every image to a maximum of", state="disabled").pack(side="left")
         ttk.Combobox(row, values=("8K", "4K", "2K", "1080", "720", "480", "144"), state="disabled", width=8).pack(side="left", padx=6)
-        row = tk.Frame(p)
-        row.pack(anchor="w", pady=(14, 0))
-        tk.Label(row, text="If an undeleted file's name is taken", state="disabled").pack(side="left")
-        ttk.Combobox(row, values=("Overwrite the file that was cropped with the old original", "Add _restored to the name", "Add a number to the name"),
-                     state="disabled", width=52).pack(side="left", padx=6)
 
         x_btn = tk.Button(self, text="\u2715", relief="flat", bd=0, padx=8, command=app.close_panel)
         x_btn.place(relx=1.0, x=-6, y=6, anchor="ne")
