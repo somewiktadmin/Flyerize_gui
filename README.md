@@ -1,4 +1,4 @@
-# Flyerize_gui v0.2.9 2026-10-29
+# Flyerize_gui v0.3.0 2026-10-29
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -33,7 +33,7 @@ With a photo, it opens that photo.  With a folder, it lines up every image in it
 
 A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
 
-If Flyerize_gui is already open and you start it again with more files, for example from the Send To menu, the new files join the open window's list.  The File menu does the same: Open photos and Open folder add to the list, and the photo on screen stays.
+If Flyerize_gui is already open and you start it again with more files, for example from the Send To menu, photos you send join the open window's list, while a folder replaces it, one folder at a time.  The File menu follows the same rule: Open photos adds to the list and the photo on screen stays, and Open folder replaces the list.
 
 ### Adding Flyerize_gui to the Send To menu
 
@@ -81,7 +81,7 @@ Every file Flyerize_gui writes is a separate file with its own name.  It rarely 
 
 ### About Overwrite!
 
-Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.  It is not on the screen until you turn it on, on the Saving and safety page of Settings, and it stays on or off exactly as you leave it.
+Overwrite! is the one button that can lose something for good, so here is exactly what it does and does not do.  It is not on the screen until you turn it on, on the Files and Navigation page of Settings, and it stays on or off exactly as you leave it.
 
 **What it does.**  It deletes the photo on screen and saves the result under the name in the box.  When the name is the photo's own, the result simply takes its place.  When the original is not a JPEG, the box starts with a `.jpg` name, so Overwrite! deletes the original and leaves the `.jpg`, and that includes a HEIC photo.  If the name belongs to a different file, the result gets a number and that file is left alone.  There is no backup and no undo.  Flyerize_gui asks first.  You can turn the question off, either with the checkbox in the dialog or in Settings.
  

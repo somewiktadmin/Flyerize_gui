@@ -48,6 +48,9 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Navigation and Auto
 
 - Results made by Save New are inserted into the list right after their photo.  Back and Move can land on them.  Skip to Next and Auto go straight to the next original.  Back from the first photo wraps around to the last, and so does jumping back 100.  Going ahead never wraps; 	finishing a long list does not make you start over.
+- Skip to Next never grays out.  A gray button is too subtle a change from a live one, and it grays exactly when someone may still want to edit the last file.  At the last original photo, and when only one photo is open, it says Open more... instead and opens the dialog that adds photos.  Only the button does this, not Alt+N, so a held key cannot open dialogs.
+- The finish dialog (the congratulation) appears once per list, when the last original photo is saved with Save New, Replace or Overwrite!, renamed, or deleted, even as the first edit of the day.  The list must have held two or more original photos at its peak, so deleting down to one still counts.  Adding photos or opening a folder starts the list over, so it can appear again.  The dialog never closes anything on its own, and doing nothing stays valid.  Its folder button, Open another folder, replaces the list.
+- Started with a single file that cannot be opened, such as a shortcut (.lnk), the error appears and then the Open dialog, and cancelling it quits.  With several files, the error ends the program as before.
 - Skip to Next is the most pressed button, since nearly every save is followed by it, so it sits close to the save buttons.
 - Auto advances after each save.  While it is on, the four save buttons show an arrow on pale green, and the navigation buttons keep their normal look because they stay fully valid.  Auto is kept away from Delete and Overwrite!.
 - Leaving a photo with unsaved changes asks first if the Confirm setting is on.  If it is off, the corners are quietly added to the Recents list instead.
@@ -83,7 +86,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 
 ## Settings panel
 
-- Settings is a panel over the picture, not a window, so it has no title bar.  It has three pages, as tabs: saving and safety (backups, names, the questions, Overwrite!), picture and screen (JPEG quality, fill, the corner picture, thumbnails, recent crops), and a third that is kept for the things deliberately left out of the program until they exist (aspect ratio, size limits and the like) and holds nothing for now.  It always opens on the first page, since that holds the settings that matter most, and the pages are stacked in one cell so the panel keeps one size and the tabs never move.  The Settings button toggles it, and a flat ✕ at the top right and Esc close it.  There is no Close button.
+- Settings is a panel over the picture, not a window, so it has no title bar.  It has three pages, as tabs above its heading: Files and Navigation (Overwrite! and its question, where backups go, names, leaving with unsaved changes), Picture and Screen (the fill, JPEG quality, the corner picture, thumbnails, recent crops, the gesture question), and a third kept for the things deliberately left out of the program until they exist.  Its grayed-out placeholders are growing to a minimum size, fitting to 8 1/2 by 11, shrinking to a maximum, and how an undelete handles a taken name.  The rope line belongs to the first page only, since it is about Overwrite!.  It always opens on the first page, and the pages are stacked in one cell so the panel keeps one size and the tabs never move.  The Settings button toggles it, and a flat ✕ at the top right and Esc close it.  There is no Close button.
 - If the panel is taller than the window it is anchored at the top, so the heading is never cut off.
 
 ## The pointer
@@ -93,7 +96,7 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Menus
 
 - File, Edit and Help sit across the top.  File has Open photos, Open folder and Exit.  Edit has Undo, the four corners (the keys 1 to 4) and Sides move (L).  Help has the Help panel and About.
-- Open adds to the current list and never replaces it.  Replacing the list would suit the transient nature of the work better, but someone who opens a second photo from a single-photo session should not find the list gone.  Politeness wins.  Photos already in the list are skipped, the photo on screen stays, and the thumbnail row appears once there are two or more photos, which is also the way back to where they were.  It is the same code that picks up files sent from a second launch.
+- Open photos adds to the end of the current list and Open folder replaces it.  Adding is the polite choice for single photos: someone who opens a second photo from a single-photo session should not find the list gone, and the thumbnail row appears as the way back.  A folder replaces the list on purpose, because a finished list is not something to keep and manage, and a malleable list would need managing of its own.  A log file is the record.  Two folders at once are refused, since the last one would silently win, and a folder together with loose photos replaces the list and then adds the photos.  It is the same code that picks up files sent from a second launch.  Subfolders are never entered.
 - It is a row of menu buttons, not the window's own menu bar.  A native menu bar can make Windows treat Alt with a letter as a menu key, and the shortcuts here depend on Alt.  Alt+F, Alt+E and Alt+H open the menus, bound by hand because F, E and H are not used by any shortcut.  Moving from one open menu to the next with the arrow keys is not built.  The row costs about 20 pixels of height.
 - Started with something it cannot open, such as a shortcut (.lnk) sent from the Send To menu, it says so and then offers the Open dialog, instead of quitting.
 - Drag and drop onto the window is not built.  Tkinter has none, Windows needs a third-party package or hand-written calls, and a dropped shortcut (.lnk) arrives as the shortcut file itself.  Open photos covers the same need on every platform.
@@ -119,9 +122,12 @@ These notes explain why Flyerize_gui behaves the way it does, so the less obviou
 ## Maybe in the future
 
 - More menu items.  The first version is built (see Menus).  File close, and a file save that would save only _which_ file you left off at, may follow.
+- A gentle note when subfolders are skipped, in the status line after a folder opens: "120 photos.  3 subfolders were not included."  Folders that start with a dot would not be counted.
+- Repeating the same crop for the next five files, or to the end of the folder.
+- A list of recently edited filenames in the left column, mirroring the recent crops list on the right, hideable in Settings, with a tooltip showing the full path.
+- Growing to a minimum size, fitting to 8 1/2 by 11 inches, and shrinking to a maximum size, which are the grayed-out placeholders on the third Settings page.  They would contradict the statements that a result is never scaled, so every one would default to off.
 - Undelete from `.trashed_` backups and from the `.originals` folder, renumbering the restored file if the name is taken.  Parked until someone asks.
 - Free rotation by degrees (0 to 360) for the selection rectangle.  Rotation is 90, 180 and 270 only.  Free rotation was rejected at first but it will be reconsidered.
 - Interface translation.  If it ever happens, the plan is to use standard interface terms so existing glossaries can be reused.
 - Entering the output size, or fitting the result to a paper size.  Showing the size is enough.  Placing the picture on a page is probably a different program.
 - Two purple dots per side.  One curve per side has been enough so far, the Bezier math is already unintuitive, and a second dot would add to that.  No flag-wave pattern has needed it yet.  It will be revisited someday.
--

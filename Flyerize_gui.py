@@ -66,7 +66,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.2.9"
+VERSION = "v0.3.0"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -106,6 +106,10 @@ QR_PNG = (
 COFFEE_FIXED = (50, 500, 1000)
 COFFEE_EVERY = 1000
 # How to fill the part of a straightened picture that lies outside the original photo (a corner pulled past the edge).
+UNDO_CHOICES = (("trashed", ".trashed_name.ext beside the photo"),
+                ("originals", ".originals folder beside the photo"),
+                ("recycle", "Recycle Bin (Windows, local drives)"))
+
 FILL_CHOICES = (
     ("reflect", "Mirror the edge: a mirrored strip of the photo fills the empty corner"),
     ("replicate", "Repeat the edge: the outermost pixels are stretched into the empty corner"),
@@ -1452,7 +1456,7 @@ def shorten_middle(text, n):
 
 class SettingsPanel(tk.Frame):
     """Settings, over the main view, on three pages.  Changes apply and are saved at once."""
-    PAGES = ("Saving and safety", "Picture and screen", "Intergalactic travel")
+    PAGES = ("Files and Navigation", "Picture and Screen", "Intergalactic Travel")
 
     def __init__(self, app):
         super().__init__(app.root)
@@ -1461,16 +1465,13 @@ class SettingsPanel(tk.Frame):
         body = self.body = tk.Frame(self)
         body.place(relx=0.5, rely=0.5, anchor="center")
         self.bind("<Configure>", self.fit)
-        head = tk.Frame(body)
-        head.pack(anchor="w", pady=(0, 6))
-        tk.Label(head, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(side="left")
-        tk.Label(head, text="Here, let me give you enough rope...", font=("TkDefaultFont", 10, "italic")).pack(side="left", padx=(14, 0), anchor="s")
         self.page = tk.IntVar(value=0)                  # it always opens on the first page
         tabs = tk.Frame(body)
         tabs.pack(anchor="w", pady=(0, 6))
         for n, title in enumerate(self.PAGES):
             tk.Radiobutton(tabs, text=title, variable=self.page, value=n, indicatoron=False, padx=12, pady=3,
                            command=self.show_page).pack(side="left", padx=(0, 2))
+        tk.Label(body, text="Settings", font=("TkDefaultFont", 13, "bold")).pack(anchor="w", pady=(0, 6))
         holder = tk.Frame(body)
         holder.pack(anchor="w")
         self.pages = []
@@ -1478,7 +1479,7 @@ class SettingsPanel(tk.Frame):
             f = tk.Frame(holder)
             f.grid(row=0, column=0, sticky="nsew")
             self.pages.append(f)
-        self.undo = tk.StringVar(value=s["undo_method"])
+        self.undo_text = tk.StringVar(value=dict(UNDO_CHOICES).get(s["undo_method"], UNDO_CHOICES[0][1]))
         self.naming = tk.StringVar(value=s["naming_mode"])
         self.confirm_gestures = tk.BooleanVar(value=s["confirm_gestures"])
         self.confirm_unsaved = tk.BooleanVar(value=s["confirm_unsaved"])
@@ -1502,39 +1503,41 @@ class SettingsPanel(tk.Frame):
             sb.bind("<FocusOut>", lambda e: self.commit())
             return sb
 
-        # page 1: saving and safety
+        # page 1: files and navigation
         p = self.pages[0]
-
-        def group(title, var, options):
-            f = tk.LabelFrame(p, text=title, padx=10, pady=4)
-            f.pack(fill="x", pady=4)
-            for value, label in options:
-                tk.Radiobutton(f, text=label, variable=var, value=value, anchor="w", command=self.commit).pack(fill="x")
-
-        group("Where backups go (Replace and Delete)", self.undo, [("trashed", ".trashed_name.ext beside the photo"),
-                                                   ("originals", ".originals folder beside the photo"),
-                                                   ("recycle", "Recycle Bin (Windows, local drives)")])
-        group("Names of new files", self.naming, [("standard", "name~1, name~2, and so on (up to 99)"),
-                                                  ("hds7", "HDS-7 date and time, the seconds count up (up to 99); a name with none gets one in front")])
-        tk.Checkbutton(p, text="Ask before applying a gesture, Reset, Zero or 5%", variable=self.confirm_gestures, command=self.commit).pack(anchor="w")
-        tk.Checkbutton(p, text="Ask before leaving a photo with unsaved changes", variable=self.confirm_unsaved, command=self.commit).pack(anchor="w")
+        tk.Label(p, text="Here, let me give you enough rope...", font=("TkDefaultFont", 10, "italic")).pack(anchor="w")
+        row = tk.Frame(p)
+        row.pack(fill="x", pady=(2, 0))
+        tk.Checkbutton(row, text="Show the Overwrite! button (Alt+D)", variable=self.overwrite_button, command=self.commit).pack(side="left")
+        tk.Checkbutton(row, text="Ask before Overwrite!", variable=self.confirm_overwrite, command=self.commit).pack(side="right")
         tk.Label(p, text="Overwrite! replaces the original with no backup and no undo, and saves space only as far as your crop\n"
-                         "is smaller.  Uploaded copies and deleted folders keep the old picture.",
-                 justify="left").pack(anchor="w", pady=(8, 2))
-        tk.Checkbutton(p, text="Show the Overwrite! button (Alt+D)", variable=self.overwrite_button, command=self.commit).pack(anchor="w")
-        tk.Checkbutton(p, text="Ask before Overwrite!", variable=self.confirm_overwrite, command=self.commit).pack(anchor="w")
+                         "is smaller.  Uploaded copies and deleted folders keep the old picture.", justify="left").pack(anchor="w", pady=(2, 6))
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(4, 0))
+        tk.Label(row, text="Where backups go (every Save, Replace and Delete)").pack(side="left")
+        undo_box = ttk.Combobox(row, textvariable=self.undo_text, values=[t for _, t in UNDO_CHOICES], state="readonly", width=40)
+        undo_box.pack(side="left", padx=6)
+        undo_box.bind("<<ComboboxSelected>>", lambda e: self.commit())
+        f = tk.LabelFrame(p, text="Names of new files", padx=10, pady=4)
+        f.pack(fill="x", pady=8)
+        for value, label in (("standard", "name~1, name~2, and so on (up to 99)"),
+                             ("hds7", "HDS-7 date and time, the seconds count up (up to 99); a name with none gets one in front")):
+            tk.Radiobutton(f, text=label, variable=self.naming, value=value, anchor="w", command=self.commit).pack(fill="x")
+        tk.Checkbutton(p, text="Ask before leaving a photo with unsaved changes", variable=self.confirm_unsaved, command=self.commit).pack(anchor="w")
 
         # page 2: picture and screen
         p = self.pages[1]
         row = tk.Frame(p)
-        row.pack(anchor="w", pady=(0, 0))
-        tk.Label(row, text="JPEG quality").pack(side="left")
-        spin(row, self.quality, 50, 100, 5)
-        tk.Label(row, text="Empty corner fill").pack(side="left", padx=(24, 0))
+        row.pack(anchor="w")
+        tk.Label(row, text="Empty corner fill").pack(side="left")
         fill_box = ttk.Combobox(row, textvariable=self.fill_text, values=[t for _, t in FILL_CHOICES], state="readonly", width=64)
         fill_box.pack(side="left", padx=6)
         fill_box.bind("<<ComboboxSelected>>", lambda e: self.commit())
-        tk.Checkbutton(p, text="Keep color sharp around text (no chroma subsampling)", variable=self.sharp, command=self.commit).pack(anchor="w")
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(6, 0))
+        tk.Label(row, text="JPEG quality").pack(side="left")
+        spin(row, self.quality, 50, 100, 5)
+        tk.Checkbutton(row, text="Keep color sharp around text (no chroma subsampling)", variable=self.sharp, command=self.commit).pack(side="left", padx=(16, 0))
         row = tk.Frame(p)
         row.pack(anchor="w", pady=(6, 0))
         lo, hi = thumb_limits(app.root)
@@ -1548,12 +1551,29 @@ class SettingsPanel(tk.Frame):
         tk.Checkbutton(row, text="Thumbnail row (2 or more photos)", variable=self.filmstrip, command=self.commit).pack(side="left")
         tk.Label(row, text="Thumbnail height").pack(side="left", padx=(8, 0))
         spin(row, self.thumb, lo, hi, 5, 10)
-        tk.Checkbutton(p, text="Show the recent crops list on the right", variable=self.show_recents, command=self.commit).pack(anchor="w", pady=(6, 0))
+        tk.Checkbutton(p, text="Show the recent (clickable) crops list on the right", variable=self.show_recents, command=self.commit).pack(anchor="w", pady=(6, 0))
         tk.Checkbutton(p, text="Sides move at startup (blue squares).  The L key switches it while you work.", variable=self.sides, command=self.commit).pack(anchor="w")
+        tk.Checkbutton(p, text="Ask before applying a gesture, Reset, Zero or 5%", variable=self.confirm_gestures, command=self.commit).pack(anchor="w")
         tk.Checkbutton(p, text="I have sent a coffee (turns off the coffee nags)", variable=self.coffee_paid, command=self.commit).pack(anchor="w", pady=(6, 0))
 
-        # page 3: for what is not in Flyerize_gui, yet
-        tk.Label(self.pages[2], text="Nothing here yet.", justify="left").pack(anchor="nw", pady=8)
+        # page 3: placeholders for what is not in Flyerize_gui, yet
+        p = self.pages[2]
+        tk.Label(p, text="Placeholders for features that are not built.  They do nothing yet.", font=("TkDefaultFont", 10, "italic")).pack(anchor="w", pady=(0, 8))
+        row = tk.Frame(p)
+        row.pack(anchor="w")
+        tk.Checkbutton(row, text="Grow image to a minimum width and height", state="disabled").pack(side="left")
+        for _ in range(2):
+            tk.Spinbox(row, width=6, state="disabled").pack(side="left", padx=4)
+        tk.Checkbutton(p, text="Fit to 8 1/2 x 11 inches", state="disabled").pack(anchor="w", pady=(4, 0))
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(4, 0))
+        tk.Checkbutton(row, text="Shrink every image to a maximum of", state="disabled").pack(side="left")
+        ttk.Combobox(row, values=("8K", "4K", "2K", "1080", "720", "480", "144"), state="disabled", width=8).pack(side="left", padx=6)
+        row = tk.Frame(p)
+        row.pack(anchor="w", pady=(14, 0))
+        tk.Label(row, text="If an undeleted file's name is taken", state="disabled").pack(side="left")
+        ttk.Combobox(row, values=("Overwrite the file that was cropped with the old original", "Add _restored to the name", "Add a number to the name"),
+                     state="disabled", width=52).pack(side="left", padx=6)
 
         x_btn = tk.Button(self, text="\u2715", relief="flat", bd=0, padx=8, command=app.close_panel)
         x_btn.place(relx=1.0, x=-6, y=6, anchor="ne")
@@ -1573,7 +1593,8 @@ class SettingsPanel(tk.Frame):
 
     def commit(self):
         s = self.app.settings
-        s["undo_method"], s["naming_mode"] = self.undo.get(), self.naming.get()
+        s["undo_method"] = next((k for k, t in UNDO_CHOICES if t == self.undo_text.get()), "trashed")
+        s["naming_mode"] = self.naming.get()
         s["no_subsampling"] = bool(self.sharp.get())
         s["confirm_gestures"] = bool(self.confirm_gestures.get())
         s["confirm_unsaved"] = bool(self.confirm_unsaved.get())
@@ -1867,6 +1888,7 @@ class App:
         self.grid_mode = 0                      # index into GRID_MODES, changed with the G key
         self.result_entries = set()             # list entries that are Save New results: Next and Auto skip them
         self.finish_shown = False               # the end-of-list dialog has been shown for this list
+        self.peak_originals = 0                 # the most original photos the list has held, which is what makes it a list worth finishing
         self.selected = None
         self.targets, self.press, self.drag, self.moved, self.stroke = [], None, None, False, []
         self.panel, self.mag, self.mag_side, self.ghost_bar, self.ghost_label = None, None, None, None, None
@@ -1959,7 +1981,7 @@ class App:
         self.prev_btn.pack(side="left", padx=(12, 2))
         self.go_btn = tk.Button(bar2, text="Move \u00b1nnn", width=11, command=self.on_go)
         self.go_btn.pack(side="left", padx=2)
-        self.next_btn = tk.Button(bar2, text="Skip to Next", width=12, command=self.on_skip)
+        self.next_btn = tk.Button(bar2, text="Skip to Next", width=12, command=self.on_next_button)
         self.next_btn.pack(side="left", padx=2)
         self.save_btn = tk.Button(bar2, text="Save New", width=11, command=lambda: self.do_save("new"))
         self.save_btn.pack(side="left", padx=(12, 2))
@@ -1980,7 +2002,7 @@ class App:
         Tooltip(self.auto_chk, "In full directory mode, automatically advances to the next image after each file is saved.")
         Tooltip(self.prev_btn, "Goes back one photo. Files saved with Save New are in the list, so you can go back to them. Alt+B or Ctrl+B does the same, and Ctrl+Shift+Alt+B jumps back 100.")
         Tooltip(self.go_btn, "Jumps ahead by a number of photos, or back with a negative number. Alt+M does the same.")
-        Tooltip(self.next_btn, "Goes to the next original photo without saving anything. Alt+N or Ctrl+N does the same, and Ctrl+Shift+Alt+N jumps ahead 100.")
+        Tooltip(self.next_btn, "Goes to the next original photo without saving anything. Alt+N or Ctrl+N does the same, and Ctrl+Shift+Alt+N jumps ahead 100.  At the end of the list, or with one photo, it says Open more... and adds photos to the list.")
         settings_btn = self.settings_btn = tk.Button(bar2, text="Settings", width=8, command=self.open_settings)
         settings_btn.pack(side="left", padx=(10, 2))
         exit_btn = tk.Button(bar2, text="EXIT", width=7, command=self.on_exit)
@@ -2050,7 +2072,7 @@ class App:
             return m
         m = add("File")
         m.add_command(label="Open photos...", command=self.open_photos)
-        m.add_command(label="Open folder...", command=self.open_folder)
+        m.add_command(label="Open folder...", command=self.choose_folder)
         m.add_separator()
         m.add_command(label="Exit", command=self.on_exit)
         m = add("Edit")
@@ -2068,27 +2090,48 @@ class App:
         messagebox.showinfo("About Flyerize_gui", "Flyerize_gui %s\n\nStraightens photos of flyers and banners.\nFree software (GPL-3.0-or-later), no warranty.\nhttps://github.com/somewiktadmin/Flyerize_gui" % VERSION, parent=self.root)
 
     def add_to_list(self, names):
-        """Add photos or folders to the end of the current list, skipping any already in it.  The photo on screen stays."""
-        added = [p for p in collect_paths(names) if p not in self.paths]
+        """Photos are added to the end of the list, skipping any already in it, and the photo on screen stays.  A folder replaces
+        the list (see replace_list), with any loose photos named alongside it added after its own.  Two folders at once are refused."""
+        folders = [n for n in names if os.path.isdir(n)]
+        files = [n for n in names if not os.path.isdir(n)]
+        if len(folders) > 1:
+            messagebox.showinfo("One folder at a time", "Open one folder at a time.  Nothing was opened.", parent=self.root)
+            return []
+        if folders:
+            return self.replace_list(folders[0], files)
+        added = [p for p in collect_paths(files) if p not in self.paths]
         if added:
             self.paths.extend(added)
+            self.finish_shown = False           # there is more to do, so the end of the list may be celebrated again
             self.set_title()
             self.say("Added %d file(s) to the list." % len(added))
         else:
             self.say("Nothing new: those photos are already in the list.")
         return added
 
+    def replace_list(self, folder, files=()):
+        """A folder replaces the list, on purpose: a finished list is not something to keep and manage.  The usual question about
+        unsaved changes comes first, and if it is refused nothing is opened."""
+        if not self.leave_ok():
+            self.say("Not opened: this photo has changes you did not save.")
+            return []
+        paths = collect_paths([folder])
+        paths += [p for p in collect_paths(list(files)) if p not in paths]
+        if not paths:
+            messagebox.showerror("Not found", "No images found in: %s" % folder)
+            return []
+        self.paths = paths
+        self.result_entries = set()
+        self.finish_shown = False
+        self.peak_originals = 0
+        self.load(0)
+        return paths
+
     def open_photos(self):
         here = os.path.dirname(self.path) if getattr(self, "path", None) else ""
         names = filedialog.askopenfilenames(parent=self.root, title="Add photos to the list", filetypes=IMAGE_TYPES, initialdir=here or None)
         if names:
             self.add_to_list(list(names))
-
-    def open_folder(self):
-        here = os.path.dirname(self.path) if getattr(self, "path", None) else ""
-        folder = filedialog.askdirectory(parent=self.root, title="Add a folder of photos to the list", initialdir=here or None)
-        if folder:
-            self.add_to_list([folder])
 
     def film_wanted(self):
         """The thumbnail row is on in Settings and at least two original photos are open.  Results made by Save New do not
@@ -2118,7 +2161,8 @@ class App:
         self.source_label.config(text=" Source File: %s" % shorten_middle(os.path.basename(self.path), 52))
         self.update_size_label()
         self.root.title("Flyerize_gui  -  %s%s" % ("(%d of %d)  -  " % (self.index + 1, n) if n > 1 else "", os.path.abspath(self.path)))
-        self.next_btn.config(state="normal" if self.next_index() is not None else "disabled")
+        self.peak_originals = max(self.peak_originals, n - len(self.result_entries))
+        self.next_btn.config(text="Skip to Next" if self.next_index() is not None else "Open more...")
         self.prev_btn.config(state="normal" if n > 1 else "disabled")
         self.go_btn.config(state="normal" if n > 1 else "disabled")
         self.auto_chk.config(state="normal" if n > 1 else "disabled")
@@ -3328,19 +3372,27 @@ class App:
     def do_save(self, mode):
         """A save button was pressed. With Auto on, a successful save moves on to the next photo."""
         if mode == "replace_perm" and not self.settings.get("overwrite_button", False):
-            self.say("Overwrite! is off.  Turn it on in Settings, on the Saving and safety page.")
+            self.say("Overwrite! is off.  Turn it on in Settings, on the Files and Navigation page.")
             return
-        originals = sum(1 for j in range(len(self.paths)) if not self.is_result(j))
-        was_last = originals > 10 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
+        was_last = self.finish_ready()
         ok = self.on_generate(mode)
         if ok and self.auto.get() and self.next_index() is not None:
             self.next_file()
         elif ok and was_last:
-            self.finish_shown = True
-            self.root.after(200, lambda: self.show_finished(originals))
+            self.finish_now()
 
-    def show_finished(self, originals):
-        """The last photo of a long list was just saved. Congratulate, and offer another folder."""
+    def finish_ready(self):
+        """True when the photo on screen is the last original of a list that has held two or more, and the finish dialog has
+        not been shown for it yet."""
+        return self.peak_originals >= 2 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
+
+    def finish_now(self):
+        self.finish_shown = True
+        self.root.after(200, self.show_finished)
+
+    def show_finished(self):
+        """The last photo of a list was just dealt with (saved, renamed or deleted). Congratulate, and offer another folder."""
+        originals = self.peak_originals
         win = tk.Toplevel(self.root)
         win.title("All done")
         win.transient(self.root)
@@ -3353,8 +3405,11 @@ class App:
         tk.Label(win, text="That was the last of the %d photos.  Nicely done." % originals, padx=28, pady=18).pack()
         row = tk.Frame(win)
         row.pack(padx=20, pady=(0, 16))
-        for label, v in (("Choose another folder", "folder"), ("Stay right here", "stay"), ("Exit", "exit")):
-            tk.Button(row, text=label, width=20 if v == "folder" else 14, command=lambda v=v: choose(v)).pack(side="left", padx=4)
+        for label, v in (("Open another folder", "folder"), ("Stay right here", "stay"), ("Exit", "exit")):
+            b = tk.Button(row, text=label, width=20 if v == "folder" else 14, command=lambda v=v: choose(v))
+            b.pack(side="left", padx=4)
+            if v == "folder":
+                Tooltip(b, "Replaces the list.  Use File, Open photos to add single files.")
         win.protocol("WM_DELETE_WINDOW", lambda: choose("stay"))
         win.bind("<Escape>", lambda e: choose("stay"))
         self.center_over_root(win)
@@ -3370,21 +3425,10 @@ class App:
 
     def choose_folder(self):
         """Replace the list with the images in a folder the user picks."""
-        if not self.leave_ok():
-            return
         here = os.path.dirname(os.path.abspath(self.path))
         folder = filedialog.askdirectory(parent=self.root, title="Choose a folder of photos", initialdir=os.path.dirname(here) or here)
-        if not folder:
-            return
-        folder = os.path.normpath(folder)
-        paths = collect_paths([folder])
-        if not paths:
-            messagebox.showerror("Not found", "No images found in: %s" % folder)
-            return
-        self.paths = paths
-        self.result_entries = set()
-        self.finish_shown = False
-        self.load(0)
+        if folder:
+            self.replace_list(os.path.normpath(folder))
 
     def on_auto(self):
         self.settings["auto_advance"] = bool(self.auto.get())
@@ -3406,6 +3450,7 @@ class App:
         typed = self.typed_name()
         if typed is None:
             return
+        was_last = self.finish_ready()
         old = self.paths[self.index]
         if not os.path.exists(old):
             messagebox.showerror("Rename", "%s is not there any more." % os.path.basename(old))
@@ -3441,12 +3486,15 @@ class App:
         self.count_operation()
         if self.auto.get() and self.next_index() is not None:
             self.on_skip()
+        elif was_last:
+            self.finish_now()
 
     def on_delete(self):
         """Move this photo aside the way Replace backs up an original, take it out of the list and go on to the next.
         Nothing is asked."""
         target = self.paths[self.index]
         name = os.path.basename(target)
+        was_last = self.finish_ready()
         where = None
         try:
             if os.path.exists(target):
@@ -3470,6 +3518,8 @@ class App:
         self.load(j if j < len(self.paths) else len(self.paths) - 1)
         self.say("Deleted: %s\nMoved to: %s" % (name, "nowhere (it was already gone)" if where is None else
                                                   where if where == "the Recycle Bin" else os.path.basename(where)))
+        if was_last:
+            self.finish_now()
 
     def leave_ok(self):
         """Called before leaving a photo (Next, Previous, Go nnn, Exit). True if it is fine to go on. Unsaved changes are the
@@ -3498,6 +3548,13 @@ class App:
         if self.leave_ok():
             self.next_file()
 
+    def on_next_button(self):
+        """The Skip to Next button.  At the end of the list, and with a single photo, it says Open more... and opens the dialog."""
+        if self.next_index() is None:
+            self.open_photos()
+        else:
+            self.on_skip()
+
     def on_exit(self):
         if not self.leave_ok():
             return
@@ -3519,24 +3576,38 @@ def main():
         forward_to_running([os.path.abspath(a) for a in args])      # a window is open: add these to its queue and leave
         log_note("HANDOFF", VERSION, run_kind(), "items=%d" % len(args), "queue=" + os.path.abspath(queue_file()))
         return
-    root = tk.Tk()
-    paths = collect_paths(args) if args else []
-    if args and not paths:
-        root.withdraw()
-        messagebox.showerror("Not found", "No images found in: %s" % " ".join(args))
-    if not paths:
-        root.withdraw()
-        path = filedialog.askopenfilename(title="Choose a photo or scan", filetypes=IMAGE_TYPES)
-        root.deiconify()
-        if not path:
-            return
-        paths = [path]
-    try:
-        App(root, paths)
-    except Exception as ex:
-        messagebox.showerror("Could not open", "%s\n\n%s" % (os.path.basename(paths[0]), ex))
+    paths = []
+    while True:
+        root = tk.Tk()
+        if args:
+            if sum(1 for a in args if os.path.isdir(a)) > 1:
+                root.withdraw()
+                messagebox.showinfo("One folder at a time", "Open one folder at a time.  Nothing was opened.")
+            else:
+                paths = collect_paths(args)
+                if not paths:
+                    root.withdraw()
+                    messagebox.showerror("Not found", "No images found in: %s" % " ".join(args))
+            args = []
+        if not paths:
+            root.withdraw()
+            path = filedialog.askopenfilename(title="Choose a photo or scan", filetypes=IMAGE_TYPES)
+            root.deiconify()
+            if not path:
+                return
+            paths = [path]
+        try:
+            App(root, paths)
+        except Exception as ex:
+            messagebox.showerror("Could not open", "%s\n\n%s" % (os.path.basename(paths[0]), ex))
+            single = len(paths) == 1                # a lone file that failed (a shortcut, say) leads to the Open dialog
+            root.destroy()
+            if not single:
+                return
+            paths = []
+            continue
+        root.mainloop()
         return
-    root.mainloop()
 
 
 if __name__ == "__main__":
