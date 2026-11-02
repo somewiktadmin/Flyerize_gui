@@ -66,7 +66,7 @@ STEP_TINTS = {10: "#fff2a8", 100: "#ffc9a0"}        # the pad's buttons while Sh
 UNDO_IDLE_SECONDS = 3.0                 # keypresses on the same corner after a pause longer than this start a new undo step
 BEND_T_MIN, BEND_T_MAX = 0.25, 0.75     # keeps the curve moving one way along the side
 WORK_SIZE = 1000
-VERSION = "v0.3.0"
+VERSION = "v0.3.2"
 DISCUSSIONS_URL = "https://github.com/somewiktadmin/Flyerize_gui/discussions"
 DONATE_URL = "https://www.paypal.com/qrcodes/managed/33ecc1cb-c786-4fba-ad4a-17242f92e108?utm_source=consapp_onscreen"
 # The picture below is a QR code for DONATE_URL. If the address above ever changes, make a new picture for it.
@@ -145,9 +145,22 @@ ZOOM_MAX = 48.0
 GHOST_PROMPT = " Either zorro or rectangle pattern was detected. \n Assigning all new corner x,y values."
 LINE_HIT = 8             # how close (screen pixels) a click must be to a side line to grab it
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
-if HEIF_OK:
-    IMAGE_EXTS |= {".heic", ".heif"}
-    IMAGE_TYPES[0] = ("Images", IMAGE_TYPES[0][1] + " *.heic *.heif")
+MORE_EXTS = (".jfif", ".jpe", ".jp2", ".j2k", ".avif", ".qoi", ".tga", ".ppm", ".pcx", ".apng", ".heic", ".heif")
+
+
+def add_image_types(extra=()):
+    """Also open what this Pillow can read from MORE_EXTS (HEIC when its decoder is installed), and whatever the settings file's
+    extra_extensions lists, which no screen shows."""
+    openable = {e for e, f in Image.registered_extensions().items() if f in Image.OPEN}
+    exts = {e for e in MORE_EXTS if e in openable or (HEIF_OK and e in (".heic", ".heif"))}
+    for e in extra:
+        if isinstance(e, str) and e.strip("."):
+            exts.add("." + e.strip(".").lower())
+    IMAGE_EXTS.update(exts)
+    IMAGE_TYPES[0] = ("Images", "*.jpg *.jpeg *.png *.bmp *.gif *.tif *.tiff *.webp " + " ".join("*" + e for e in sorted(exts)))
+
+
+add_image_types()
 
 
 # ===== corner detection (first version) =====
@@ -326,9 +339,11 @@ def bend_from_point(corners, side, p):
 # ===== the warp (Coons-style blend) =====
 
 def output_size(corners):
+    """Size in pixels of the straightened result.  The corners are pixel positions and both end pixels count, so corners at
+    0 and 99 enclose 100 pixels, and corners at the photo's own corners give the photo's own size."""
     TL, TR, BR, BL = corners
-    w = int(round((np.linalg.norm(TR - TL) + np.linalg.norm(BR - BL)) / 2))
-    h = int(round((np.linalg.norm(BL - TL) + np.linalg.norm(BR - TR)) / 2))
+    w = int(round((np.linalg.norm(TR - TL) + np.linalg.norm(BR - BL)) / 2)) + 1
+    h = int(round((np.linalg.norm(BL - TL) + np.linalg.norm(BR - TR)) / 2)) + 1
     return max(2, w), max(2, h)
 
 
@@ -867,8 +882,7 @@ class CornerPanel(tk.Frame):
             b.config(bg=STEP_TINTS.get(step, self.default_bg))
 
     def pick(self, i):
-        if i != self.idx:
-            self.app.select(i)
+        self.app.toggle_corner(i)
 
     def hover_check(self, i):
         """A thin border under the pointer instead of a hand cursor, and a solid one around the selected corner."""
@@ -1061,6 +1075,7 @@ SETTINGS_DEFAULTS = {
     "naming_mode": "standard",      # standard (name~1) or hds7 (the seconds count up)
     "auto_advance": False,          # in full directory mode, move on to the next photo after each save
     "confirm_overwrite": True,      # ask before Overwrite!, which has no backup and no undo
+    "extra_extensions": [],         # more file extensions to open, for example [".psd"]; only this file shows it, no screen does
     "confirm_gestures": True,       # ask before applying a gesture, Reset, Zero or 5%
     "confirm_unsaved": True,        # ask before leaving a photo with unsaved changes
     "overwrite_button": False,      # show the Overwrite! button (Alt+D); until then it is not there at all
@@ -1867,7 +1882,7 @@ class App:
     def __init__(self, root, paths):
         self.root, self.paths = root, list(paths)
         self.settings = load_settings()
-        self.index, self.path = 0, self.paths[0]
+        self.index, self.path = 0, (self.paths[0] if self.paths else "")
         self.img = np.zeros((10, 10, 3), np.uint8)
         self.pil, self.photo_when = None, None
         self.corners = np.zeros((4, 2))
@@ -1888,6 +1903,8 @@ class App:
         self.grid_mode = 0                      # index into GRID_MODES, changed with the G key
         self.result_entries = set()             # list entries that are Save New results: Next and Auto skip them
         self.finish_shown = False               # the end-of-list dialog has been shown for this list
+        self.waiting = True                     # no photo yet: the start-up dialogs are showing over the empty window
+        self.closed = False
         self.peak_originals = 0                 # the most original photos the list has held, which is what makes it a list worth finishing
         self.selected = None
         self.targets, self.press, self.drag, self.moved, self.stroke = [], None, None, False, []
@@ -2047,9 +2064,39 @@ class App:
         root.protocol("WM_DELETE_WINDOW", self.on_exit)
         touch_lock()
         log_start()
-        self.load(0)
         self.poll_id = root.after(QUEUE_POLL_MS, self.poll_queue)
-        root.after(600, self.first_run_check)
+
+    def start(self, paths, notice=None):
+        """Show the first photo.  The window is already up and empty, so every dialog from here on opens over it.  A notice (some
+        trouble with what was given at start-up) comes first.  A lone file that cannot be opened leads to the Open dialog, and
+        cancelling that quits."""
+        self.root.title("Flyerize_gui")
+        self.root.update()
+        while True:
+            if notice:
+                getattr(messagebox, notice[2])(notice[0], notice[1], parent=self.root)
+                notice = None
+            if not paths:
+                names = filedialog.askopenfilenames(parent=self.root, title="Open photos", filetypes=IMAGE_TYPES)
+                if not names:
+                    self.closed = True
+                    self.root.destroy()
+                    return
+                paths = list(names)
+            self.paths, self.index, self.path = list(paths), 0, paths[0]
+            try:
+                self.load(0)
+            except Exception as ex:
+                messagebox.showerror("Could not open", "%s\n\n%s" % (os.path.basename(paths[0]), ex), parent=self.root)
+                if len(paths) != 1:
+                    self.closed = True
+                    self.root.destroy()
+                    return
+                paths = []
+                continue
+            self.waiting = False
+            self.root.after(600, self.first_run_check)
+            return
 
     def say(self, text):
         n = max(30, self.status.winfo_width() // 7) if self.status.winfo_width() > 50 else 110
@@ -2307,7 +2354,7 @@ class App:
     def poll_queue(self):
         try:
             touch_lock()
-            lines = read_queue()
+            lines = [] if self.waiting else read_queue()        # files sent in wait until the first photo is open
             if lines:
                 added = self.add_to_list(lines)
                 log_note("QUEUE_IN", VERSION, run_kind(), "items=%d" % len(lines), "added=%d" % len(added),
@@ -2491,6 +2538,16 @@ class App:
             self.panel.set_corner(i)
         self.redraw_overlay()
 
+    def toggle_corner(self, i):
+        """The key of a corner, a click on its cell in the panel, or a click on its dot while it is selected: select it, or let go
+        of it, which closes the large panel too."""
+        if self.selected == i:
+            self.deselect()
+            if isinstance(self.panel, CornerPanel):
+                self.close_panel()
+        else:
+            self.select(i)
+
     def reset_corner_panel(self):
         """The corner picture size was changed in Settings: the next panel is made at the new size."""
         if self.mag is not None:
@@ -2619,12 +2676,7 @@ class App:
         ctrl, shift = bool(e.state & 0x4), bool(e.state & 0x1)
         step = 100 if ctrl else 10 if shift else 1
         if k in CORNER_KEYS:
-            if self.selected == CORNER_KEYS[k]:     # the key of the selected corner lets go of it, and closes the large panel too
-                self.deselect()
-                if isinstance(self.panel, CornerPanel):
-                    self.close_panel()
-            else:
-                self.select(CORNER_KEYS[k])
+            self.toggle_corner(CORNER_KEYS[k])
         elif k in ("l", "L"):
             self.toggle_sides()
         elif k == "0":
@@ -2713,6 +2765,7 @@ class App:
         if kind == "bend":
             self.drag = ("bend", key)
         elif kind == "corner":
+            self.was_selected = self.selected == key
             self.select(key)
             self.drag = ("corner", key)
         else:
@@ -2763,6 +2816,9 @@ class App:
         self.drag, self.press = None, None
         self.canvas.pan_end()
         self.canvas.delete("stroke")
+        if d is not None and d[0] == "corner" and not moved and getattr(self, "was_selected", False):
+            self.toggle_corner(d[1])            # a click on the dot of the selected corner lets go of it, as its key does
+            return
         if d is None or d[0] != "blank":
             return
         if not moved:
@@ -3374,17 +3430,30 @@ class App:
         if mode == "replace_perm" and not self.settings.get("overwrite_button", False):
             self.say("Overwrite! is off.  Turn it on in Settings, on the Files and Navigation page.")
             return
-        was_last = self.finish_ready()
+        was_last = self.finish_ready("save " + mode)
         ok = self.on_generate(mode)
         if ok and self.auto.get() and self.next_index() is not None:
             self.next_file()
         elif ok and was_last:
             self.finish_now()
 
-    def finish_ready(self):
+    def finish_ready(self, action=""):
         """True when the photo on screen is the last original of a list that has held two or more, and the finish dialog has
-        not been shown for it yet."""
-        return self.peak_originals >= 2 and not self.finish_shown and not self.is_result(self.index) and self.next_index() is None
+        not been shown for it yet.  At the end of a list the log says what was decided and why."""
+        at_end = self.next_index() is None
+        if self.peak_originals < 2:
+            reason = "the list never held two originals"
+        elif self.finish_shown:
+            reason = "already shown for this list"
+        elif self.is_result(self.index):
+            reason = "the photo on screen is a result"
+        elif not at_end:
+            reason = "not the last original"
+        else:
+            reason = "due"
+        if at_end:
+            log_note("FINISH_CHECK", VERSION, action, reason, "peak=%d" % self.peak_originals, "photo %d of %d" % (self.index + 1, len(self.paths)))
+        return reason == "due"
 
     def finish_now(self):
         self.finish_shown = True
@@ -3418,6 +3487,7 @@ class App:
         except tk.TclError:
             pass
         self.root.wait_window(win)
+        log_note("FINISH_DIALOG", VERSION, result["v"])
         if result["v"] == "folder":
             self.choose_folder()
         elif result["v"] == "exit":
@@ -3450,7 +3520,7 @@ class App:
         typed = self.typed_name()
         if typed is None:
             return
-        was_last = self.finish_ready()
+        was_last = self.finish_ready("rename")
         old = self.paths[self.index]
         if not os.path.exists(old):
             messagebox.showerror("Rename", "%s is not there any more." % os.path.basename(old))
@@ -3494,7 +3564,7 @@ class App:
         Nothing is asked."""
         target = self.paths[self.index]
         name = os.path.basename(target)
-        was_last = self.finish_ready()
+        was_last = self.finish_ready("delete")
         where = None
         try:
             if os.path.exists(target):
@@ -3576,38 +3646,20 @@ def main():
         forward_to_running([os.path.abspath(a) for a in args])      # a window is open: add these to its queue and leave
         log_note("HANDOFF", VERSION, run_kind(), "items=%d" % len(args), "queue=" + os.path.abspath(queue_file()))
         return
-    paths = []
-    while True:
-        root = tk.Tk()
-        if args:
-            if sum(1 for a in args if os.path.isdir(a)) > 1:
-                root.withdraw()
-                messagebox.showinfo("One folder at a time", "Open one folder at a time.  Nothing was opened.")
-            else:
-                paths = collect_paths(args)
-                if not paths:
-                    root.withdraw()
-                    messagebox.showerror("Not found", "No images found in: %s" % " ".join(args))
-            args = []
-        if not paths:
-            root.withdraw()
-            path = filedialog.askopenfilename(title="Choose a photo or scan", filetypes=IMAGE_TYPES)
-            root.deiconify()
-            if not path:
-                return
-            paths = [path]
-        try:
-            App(root, paths)
-        except Exception as ex:
-            messagebox.showerror("Could not open", "%s\n\n%s" % (os.path.basename(paths[0]), ex))
-            single = len(paths) == 1                # a lone file that failed (a shortcut, say) leads to the Open dialog
-            root.destroy()
-            if not single:
-                return
-            paths = []
-            continue
+    add_image_types(load_settings().get("extra_extensions", []))
+    paths, notice = [], None
+    if args:
+        if sum(1 for a in args if os.path.isdir(a)) > 1:
+            notice = ("One folder at a time", "Open one folder at a time.  Nothing was opened.", "showinfo")
+        else:
+            paths = collect_paths(args)
+            if not paths:
+                notice = ("Not found", "No images found in: %s" % " ".join(args), "showerror")
+    root = tk.Tk()
+    app = App(root, [])                 # the window comes up empty, and start() fills it under whatever dialogs are needed
+    app.start(paths, notice)
+    if not app.closed:
         root.mainloop()
-        return
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Flyerize_gui v0.3.0 2026-10-29
+# Flyerize_gui v0.3.2 2026-10-29
 Windows tool to fix the perspective and curl in photos of flyers and banners: set four corners, bend the sides, save a clean rectangle.
 
 *Straighten the flyer.  Flatten the banner.  Keep the wall out of it.*
@@ -29,7 +29,7 @@ Give it a photo, or a folder, or nothing at all:
     python Flyerize_gui.py "C:\Photos\Fence Banners"
     python Flyerize_gui.py
 
-With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone HEIC photos are read too when pi-heif-decoder is installed (the .exe includes it), and the result is saved as a JPEG.
+With a photo, it opens that photo.  With a folder, it lines up every image in it.  With nothing, it asks you to choose a photo.  It reads JPG, PNG, BMP, GIF, TIFF and WebP, and also JFIF, JPEG 2000, AVIF, QOI, TGA, PPM and PCX when your Pillow can, and it saves JPEG (or PNG and BMP when the original was one of those). iPhone HEIC photos are read too when pi-heif-decoder is installed (the .exe includes it), and the result is saved as a JPEG.
 
 A gentle reminder: before you point it at a whole folder, make a backup copy of that folder, for example all of `C:\Photos`.  Single photos are well tested, the whole-folder mode much less so, and irreplaceable photos and screenshots deserve a backup of their own whatever any program promises.
 
@@ -96,7 +96,7 @@ When in doubt, use Save New, which keeps both files, or Replace, which keeps the
 
 ## Where Flyerize_gui keeps its files
 
-Settings, and a log of what Flyerize_gui has done (`Flyerize_gui.log`), live in `%APPDATA%\Flyerize_gui\`.  The log starts a fresh file at about 1 MB and keeps the previous one as `Flyerize_gui.log.old`.  If your Python came from the Microsoft Store, Windows quietly keeps these in a private copy of that folder, under `%LOCALAPPDATA%\Packages\` in a folder whose name starts with `PythonSoftwareFoundation`, so you will not find them in the usual place.
+Settings, and a log of what Flyerize_gui has done (`Flyerize_gui.log`), live in `%APPDATA%\Flyerize_gui\`.  The log starts a fresh file at about 1 MB and keeps the previous one as `Flyerize_gui.log.old`.  If your Python came from the Microsoft Store, Windows quietly keeps these in a private copy of that folder, under `%LOCALAPPDATA%\Packages\` in a folder whose name starts with `PythonSoftwareFoundation`, so you will not find them in the usual place.  The settings file also has an `extra_extensions` list, such as `[".psd"]`, for more file types to open, and no settings screen shows it.
 
 ## Good to know
 
